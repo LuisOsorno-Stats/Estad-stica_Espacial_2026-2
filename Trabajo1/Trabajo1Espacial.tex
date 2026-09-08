@@ -1,0 +1,372 @@
+% Options for packages loaded elsewhere
+\PassOptionsToPackage{unicode}{hyperref}
+\PassOptionsToPackage{hyphens}{url}
+\PassOptionsToPackage{dvipsnames,svgnames,x11names}{xcolor}
+%
+\documentclass[
+  12pt,
+  letterpaper,
+  DIV=11,
+  numbers=noendperiod]{scrartcl}
+
+\usepackage{amsmath,amssymb}
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{textcomp} % provide euro and other symbols
+\else % if luatex or xetex
+  \usepackage{unicode-math}
+  \defaultfontfeatures{Scale=MatchLowercase}
+  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
+\fi
+\usepackage{lmodern}
+\ifPDFTeX\else  
+    % xetex/luatex font selection
+  \setmainfont[]{Times New Roman}
+\fi
+% Use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\IfFileExists{microtype.sty}{% use microtype if available
+  \usepackage[]{microtype}
+  \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
+}{}
+\makeatletter
+\@ifundefined{KOMAClassName}{% if non-KOMA class
+  \IfFileExists{parskip.sty}{%
+    \usepackage{parskip}
+  }{% else
+    \setlength{\parindent}{0pt}
+    \setlength{\parskip}{6pt plus 2pt minus 1pt}}
+}{% if KOMA class
+  \KOMAoptions{parskip=half}}
+\makeatother
+\usepackage{xcolor}
+\usepackage[top=25.4mm,left=25.4mm,right=25.4mm,bottom=25.4mm]{geometry}
+\setlength{\emergencystretch}{3em} % prevent overfull lines
+\setcounter{secnumdepth}{5}
+% Make \paragraph and \subparagraph free-standing
+\ifx\paragraph\undefined\else
+  \let\oldparagraph\paragraph
+  \renewcommand{\paragraph}[1]{\oldparagraph{#1}\mbox{}}
+\fi
+\ifx\subparagraph\undefined\else
+  \let\oldsubparagraph\subparagraph
+  \renewcommand{\subparagraph}[1]{\oldsubparagraph{#1}\mbox{}}
+\fi
+
+
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}\usepackage{longtable,booktabs,array}
+\usepackage{calc} % for calculating minipage widths
+% Correct order of tables after \paragraph or \subparagraph
+\usepackage{etoolbox}
+\makeatletter
+\patchcmd\longtable{\par}{\if@noskipsec\mbox{}\fi\par}{}{}
+\makeatother
+% Allow footnotes in longtable head/foot
+\IfFileExists{footnotehyper.sty}{\usepackage{footnotehyper}}{\usepackage{footnote}}
+\makesavenoteenv{longtable}
+\usepackage{graphicx}
+\makeatletter
+\def\maxwidth{\ifdim\Gin@nat@width>\linewidth\linewidth\else\Gin@nat@width\fi}
+\def\maxheight{\ifdim\Gin@nat@height>\textheight\textheight\else\Gin@nat@height\fi}
+\makeatother
+% Scale images if necessary, so that they will not overflow the page
+% margins by default, and it is still possible to overwrite the defaults
+% using explicit options in \includegraphics[width, height, ...]{}
+\setkeys{Gin}{width=\maxwidth,height=\maxheight,keepaspectratio}
+% Set default figure placement to htbp
+\makeatletter
+\def\fps@figure{htbp}
+\makeatother
+% definitions for citeproc citations
+\NewDocumentCommand\citeproctext{}{}
+\NewDocumentCommand\citeproc{mm}{%
+  \begingroup\def\citeproctext{#2}\cite{#1}\endgroup}
+\makeatletter
+ % allow citations to break across lines
+ \let\@cite@ofmt\@firstofone
+ % avoid brackets around text for \cite:
+ \def\@biblabel#1{}
+ \def\@cite#1#2{{#1\if@tempswa , #2\fi}}
+\makeatother
+\newlength{\cslhangindent}
+\setlength{\cslhangindent}{1.5em}
+\newlength{\csllabelwidth}
+\setlength{\csllabelwidth}{3em}
+\newenvironment{CSLReferences}[2] % #1 hanging-indent, #2 entry-spacing
+ {\begin{list}{}{%
+  \setlength{\itemindent}{0pt}
+  \setlength{\leftmargin}{0pt}
+  \setlength{\parsep}{0pt}
+  % turn on hanging indent if param 1 is 1
+  \ifodd #1
+   \setlength{\leftmargin}{\cslhangindent}
+   \setlength{\itemindent}{-1\cslhangindent}
+  \fi
+  % set entry spacing
+  \setlength{\itemsep}{#2\baselineskip}}}
+ {\end{list}}
+\usepackage{calc}
+\newcommand{\CSLBlock}[1]{\hfill\break\parbox[t]{\linewidth}{\strut\ignorespaces#1\strut}}
+\newcommand{\CSLLeftMargin}[1]{\parbox[t]{\csllabelwidth}{\strut#1\strut}}
+\newcommand{\CSLRightInline}[1]{\parbox[t]{\linewidth - \csllabelwidth}{\strut#1\strut}}
+\newcommand{\CSLIndent}[1]{\hspace{\cslhangindent}#1}
+
+\KOMAoption{captions}{tableheading}
+\renewcommand{\thetable}{\thesection.\arabic{table}}
+\renewcommand{\thefigure}{\thesection.\arabic{figure}}
+\renewcommand{\theequation}{\thesection.\arabic{equation}}
+\makeatletter
+\@addtoreset{table}{section}
+\@addtoreset{figure}{section}
+\@addtoreset{equation}{section}
+\makeatother
+
+\usepackage{fancyhdr}
+\usepackage{ifthen}
+\usepackage{float}
+\usepackage{booktabs}
+
+\pagestyle{fancy}
+\fancyhf{}
+
+\fancyhead[L]{%
+  \ifthenelse{\isodd{\value{page}}}{\textit{Sede Medellín}}{\thepage}
+}
+\fancyhead[R]{%
+  \ifthenelse{\isodd{\value{page}}}{\thepage}{Suarez, Perez, Sanchez, Jimenez}
+}
+
+\fancyfoot[R]{Materia}
+
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0.4pt}
+
+\usepackage{etoolbox}
+
+\pretocmd{\tableofcontents}{\thispagestyle{empty}}{}{}
+\pretocmd{\listoffigures}{\thispagestyle{empty}}{}{}
+\pretocmd{\listoftables}{\thispagestyle{empty}}{}{}
+
+\apptocmd{\tableofcontents}{\clearpage}{}{}
+\apptocmd{\listoffigures}{\clearpage}{}{}
+\apptocmd{\listoftables}{\clearpage}{}{}
+\makeatletter
+\@ifpackageloaded{caption}{}{\usepackage{caption}}
+\AtBeginDocument{%
+\ifdefined\contentsname
+  \renewcommand*\contentsname{Tabla de contenidos}
+\else
+  \newcommand\contentsname{Tabla de contenidos}
+\fi
+\ifdefined\listfigurename
+  \renewcommand*\listfigurename{Índice de Figuras}
+\else
+  \newcommand\listfigurename{Índice de Figuras}
+\fi
+\ifdefined\listtablename
+  \renewcommand*\listtablename{Índice de Tablas}
+\else
+  \newcommand\listtablename{Índice de Tablas}
+\fi
+\ifdefined\figurename
+  \renewcommand*\figurename{Figura}
+\else
+  \newcommand\figurename{Figura}
+\fi
+\ifdefined\tablename
+  \renewcommand*\tablename{Tabla}
+\else
+  \newcommand\tablename{Tabla}
+\fi
+}
+\@ifpackageloaded{float}{}{\usepackage{float}}
+\floatstyle{ruled}
+\@ifundefined{c@chapter}{\newfloat{codelisting}{h}{lop}}{\newfloat{codelisting}{h}{lop}[chapter]}
+\floatname{codelisting}{Listado}
+\newcommand*\listoflistings{\listof{codelisting}{Listado de Listados}}
+\makeatother
+\makeatletter
+\makeatother
+\makeatletter
+\@ifpackageloaded{caption}{}{\usepackage{caption}}
+\@ifpackageloaded{subcaption}{}{\usepackage{subcaption}}
+\makeatother
+\ifLuaTeX
+\usepackage[bidi=basic]{babel}
+\else
+\usepackage[bidi=default]{babel}
+\fi
+\babelprovide[main,import]{spanish}
+\ifPDFTeX
+\else
+\babelfont{rm}[]{Times New Roman}
+\fi
+% get rid of language-specific shorthands (see #6817):
+\let\LanguageShortHands\languageshorthands
+\def\languageshorthands#1{}
+\ifLuaTeX
+  \usepackage{selnolig}  % disable illegal ligatures
+\fi
+\usepackage{bookmark}
+
+\IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
+\urlstyle{same} % disable monospaced font for URLs
+\hypersetup{
+  pdftitle={Trabajo 1: Análisis Espacial},
+  pdfauthor={Suarez, Perez, Sanchez, Jimenez},
+  pdflang={es},
+  colorlinks=true,
+  linkcolor={blue},
+  filecolor={Maroon},
+  citecolor={Blue},
+  urlcolor={Blue},
+  pdfcreator={LaTeX via pandoc}}
+
+\title{Trabajo 1: Análisis Espacial}
+\author{Suarez, Perez, Sanchez, Jimenez}
+\date{}
+
+\begin{document}
+\maketitle
+
+% nada
+\begin{titlepage}
+
+\newcommand{\HRule}{\rule{\linewidth}{0.5mm}} % Defines a new command for the horizontal lines, change thickness here
+
+\center % Center everything on the page
+
+
+\begin{minipage}{13.5cm}
+%----------------------------------------------------------------------------------------
+%  LOGO SECTION
+%----------------------------------------------------------------------------------------
+\center
+
+\includegraphics[width=3cm,height=4cm]{Logos/logo.png}\\[0.5cm] % Include a department/university logo - this will require the graphicx package
+
+%----------------------------------------------------------------------------------------
+
+%----------------------------------------------------------------------------------------
+%	HEADING SECTIONS
+%----------------------------------------------------------------------------------------
+\textsc{\Large UNIVERSIDAD NACIONAL DE COLOMBIA \\[1.0cm]
+{\large PREGRADO EN ESTADÍSTICA\\[0.5cm]
+Departamento de Estadística\\[0.2cm]
+Facultad de Ciencias}}\\[2cm]
+
+
+%----------------------------------------------------------------------------------------
+%	TITLE SECTION
+%----------------------------------------------------------------------------------------
+
+\rule[1.7mm]{0.5cm}{0.5mm}
+\hfill
+\textsc{\Large Materia}
+\hfill
+\rule[1.7mm]{0.5cm}{0.5mm}
+\\[0.2cm]
+
+%\bfseries
+{\Large
+\textit{N-ésimo Trabajo}
+}\\[0.2cm]
+
+\HRule \\[1cm]
+
+{\large \textbf{Estudiantes}:\\[0.3cm]
+
+\begin{tabular}{cc}
+Pedro Suarez & C.C. 123456789\\
+Pepito Perez & C.C. 123456789\\
+Tulia Sanchez & C.C. 123456789\\
+Rafael Jimenez & C.C. 123456789
+\end{tabular}
+\begin{tabular}{cc}
+Pedro@unal.edu.co\\
+Pepito@unal.edu.co\\
+Tulia@unal.edu.co\\
+Rafael@unal.edu.co
+\end{tabular}
+}\\[2.2cm]
+
+{\large
+Medellín, Colombia
+}\\[0.1cm]
+
+{\large
+Junio 6 de 2025
+}
+
+\end{minipage}
+
+\vfill % Fill the rest of the page with whitespace
+
+%\cleardoublepage
+%\newpage{\ }
+%\thispagestyle{empty}
+\end{titlepage}
+
+
+
+
+
+\renewcommand*\contentsname{Índice General}
+{
+\hypersetup{linkcolor=}
+\setcounter{tocdepth}{3}
+\tableofcontents
+}
+\listoffigures
+\listoftables
+\section{Introducción}\label{introducciuxf3n}
+
+El presente informe en Quarto reúne la aplicación práctica de los
+fundamentos del análisis espacial mediante el software R. El objetivo
+central consiste en adquirir fluidez computacional en el manejo de datos
+georreferenciados mediante la exploración interactiva y personalizada de
+comandos.
+
+Para validar la compresión del material de estudio, se han sustituido
+los ejemplos predeterminados del libro guía por un conjunto propio de
+entidades geométricas (puntos, líneas y polígonos). A través de esta
+experimentación, se abarcan desde las operaciones lógicas y topológicas
+básicas en modelos vector y ráster hasta la composición final de mapas
+detallados, demostrando la capacidad práctica para procesar y presentar
+información cartográfica de forma autónoma.
+
+\phantomsection\label{refs}
+\begin{CSLReferences}{1}{0}
+\bibitem[\citeproctext]{ref-Box_Jenkins_Reinsel_2013}
+Box, George Edward Pelham, Gwilym M. Jenkins, y Gregory C. Reinsel.
+2013. \emph{Time series analysis: Forecasting and control}. 4.ª ed. John
+Wiley \& Sons. \url{https://doi.org/10.1002/9781118619193}.
+
+\bibitem[\citeproctext]{ref-Brockwell_Davis_2016}
+Brockwell, Peter J., y Richard A. Davis. 2016. \emph{Introduction to
+time series and forecasting}. 3.ª ed. Basel, Switzerland: Springer
+International Publishing.
+
+\bibitem[\citeproctext]{ref-Maddala_Kim_2012}
+Maddala, G. S., y In-Moo Kim. 2012. \emph{Themes in modern econometrics:
+Unit roots, cointegration, and structural change}. Cambridge,
+Inglaterra: Cambridge University Press.
+
+\bibitem[\citeproctext]{ref-ReyesPolanco_2020}
+Reyes Polanco, Andres Eduardo. 2020. \emph{Series de Tiempo: Conceptos
+Basicos de Analisis de Series de Tiempo en el Dominio del Tiempo}.
+Editado por Daniel Jose Reyes Valero. Daniel Jose Reyes Valero.
+
+\bibitem[\citeproctext]{ref-Wei_2019}
+Wei, William W. S. 2019. \emph{Time series analysis: Univariate and
+multivariate methods (classic version)}. 2.ª ed. Upper Saddle River, NJ:
+Pearson.
+
+\end{CSLReferences}
+
+
+
+\end{document}

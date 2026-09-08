@@ -1,0 +1,452 @@
+---
+title: "Título del Documento"
+author: "Tu Nombre"
+format: typst
+---
+
+```{r include=FALSE}
+rm(list = ls())
+if(!require(pacman)){install.packages("pacman"); library(pacman)}
+pacman::p_load("sf")
+
+options(kableExtra.latex.load_packages = F)
+
+knitr::opts_chunk$set(fig.path = 'figurasR/',
+                      echo = FALSE, warning = FALSE, message = FALSE,
+                      comment = NA,
+                      fig.align="center",
+                      cache=FALSE, webshot = "webshot") # 
+
+knitr::write_bib(c(.packages(),"knitr","rmarkdown"),file="bib/paquetes.bib", width = 60)
+```
+
+
+
+
+# Introducción
+
+Este documento utiliza el motor de Typst actualizado.
+
+
+
+
+
+# Introducción
+
+
+El presente informe en Quarto reúne la aplicación práctica de los fundamentos del análisis espacial mediante el software R. El objetivo central consiste en adquirir fluidez computacional en el manejo de datos georreferenciados mediante la exploración interactiva y personalizada de comandos.
+
+Para validar la compresión del material de estudio, se han sustituido los ejemplos predeterminados del libro guía por un conjunto propio de entidades geométricas (puntos, líneas y polígonos). A través de esta experimentación, se abarcan desde las operaciones lógicas y topológicas básicas en modelos vector y ráster hasta la composición final de mapas detallados, demostrando la capacidad práctica para procesar y presentar información cartográfica de forma autónoma.
+
+
+
+# Capítulo 3. Organización de los objetos espaciales en R.
+
+Se estudiará la forma en que están estructurados los datos espaciales en R. Explorando los paquetes **sf** y **raster**.
+
+
+##  Datos vectoriales: modelo simple feature
+
+El paquete **sf** es compatible con los tipos *simple feature*, es decir, con la mayoría de operaciones espaciales necesarias como: puntos, líneas, polígonos y versiones múltiples. El paquete **sf** incorpora tres funcionalidades muy importantes: *sp* para el sistema de clases de objetos espaciales, *rgdal* para leer y escribir datos y *rgeos* para operaciones espaciales. 
+
+Los obejtos *simple feature* se almacenan en un dataframe, ocupando una columna especial con el nombre de *geom* o *geometry*. **sf** tiene muchas clases de objetos como: *Point*, *Multipoint*, *Linestring*, *Polygon* entre otras. 
+
+
+## Cobertura de puntos
+
+**sf** permite manejar datos en dos, tres o cuatro dimensiones. Las coordenadas se manejan en forma vectorial o de tabla, luego se transforman en una cobertura de puntos de la clase *sfg:* simple feature geometry con la función ***st_point()*** para un punto o ***st_multipoint()*** para múltiples puntos. 
+
+El ejemplo de la función ***st_point()*** lo vemos en el siguiente script:
+
+```{r}
+# Se carga la libreria sf
+library(sf)
+
+# Simple features geometry
+
+Pt <- st_point(c(-4,6)) # Punto en dos dimensiones
+class(Pt)
+
+Pt <- st_point(c(1,10,0,32),"XYZM") # Punto en cuatro dimensiones (XYZM)
+class(Pt)
+
+str(Pt)
+```
+
+```{r}
+# Se grafica el punto de cuatro dimensiones en dos
+
+plot(Pt, axes = TRUE)
+```
+
+
+Por su parte, el ejemplo de la función ***st_multipoint()*** lo vemos en el siguiente script:
+
+```{r}
+# Se crean dos vectores en R^3, Xs y Ys respectivamente
+
+Xs <- c(-1, 1, 2)
+
+Ys <- c(1, 2, -1)
+
+# Se crea una tabla de coordenadas
+
+coords <- cbind(Xs, Ys)
+
+print(coords)
+
+# Se convierte o se crea a objeto Multipoint
+
+MPt <- st_multipoint(coords)
+```
+
+```{r}
+# Se grafica usando las dos primeras dimensiones
+
+plot(MPt, axes = TRUE)
+```
+
+```{r}
+class(MPt)
+
+print(MPt)
+
+# Multipoint en 3 dimensiones
+
+xyz <- cbind(coords,c(8, 7, 17))
+print(xyz)
+
+# Transformar a objetos multipoint
+
+MPt <- st_multipoint(xyz)
+print(MPt)
+```
+
+Se pueden juntar los objetos en colecciones *sfc* con la funcion ***st_sfc()***. Por ejemplo, geometria1 es un objeto de la clase *simple feature collection (sfc)* que une puntos. Es posible determinar el sistema de coordenadas de los datos con la opción *crs*. El sistema de coordenadas puede ser descrito por el código numérico *EPSG* o bien por el sistema de *Proj4string*. 
+
+
+```{r}
+# Se crean objetos de tipo sfg
+
+Pt1 <- st_point(c(-2,0))
+
+Pt2 <- st_point(c(0,2))
+
+Pt3 <- st_point(c(2,0))
+
+# Luego se juntas los objetos en uno tipo sfc
+
+geometria1 <- st_sfc(Pt1,Pt2,Pt3)
+
+print(geometria1)
+
+```
+
+Las geometrías *sfc* que se crearon solo tienen información de las coordenadas, no tienen atributos. La idea es crear una tabla de atributos con información sobre cada uno de los puntos, dicha tabla permitirá crear un objeto más sofisticado que la clase *simple feature*. 
+
+```{r}
+# Creación de un dataframe asociadno una geometría sfc
+# Tabla con ID e información adicional
+
+num <- c(1,2,3)
+
+nombre <- c("Pozo","Gasolinera","Pozo")
+
+tabpuntos <- data.frame(cbind(num,nombre))
+
+class(tabpuntos)
+
+print(tabpuntos)
+
+# Le agregamos el objeto sf para crear geometría
+
+SFPt <- st_sf(tabpuntos, geometry = geometria1)
+```
+
+Existen diferentes formas de explorar la tabla creada, por ejemplo, ***class()*** nos indica la naturaleza del objeto (es una mezcla de un dataframe y un objeto espacial); ***print()*** nos permite observar la tabla de atributos o variables que tiene. 
+
+```{r}
+# Función class()
+
+class(SFPt)
+
+# Función print()
+
+print(SFPt)
+```
+
+Finalmente la función ***plot()*** permite visualizar un mapa que se crea para cada atributo de la tabla. 
+
+```{r}
+# Función plot()
+
+plot(SFPt,axes=TRUE)
+```
+
+Para visualizar la geometría del objeto, en este caso la ubicación de los puntos, se usa la función ***st_geometry()***
+
+```{r}
+plot(st_geometry(SFPt),axes=TRUE)
+```
+
+Así mismo como se crearon objetos espaciales con la librería **sf**, con la función ***as.data.frame()*** se pueden llevar los objetos espaciales a una tabla de atributos (perdiendo información espacial). Si se quiere filtrar la base de datos o hacer query, de manera simple. Por ejemplo, ***Pozos <- SFPt[nombre=="Pozo",]*** crea un objeto sf con aquellos puntos en el cual el nombre es "Pozo"
+
+```{r}
+# Se puede extraer la tabla de atributos de un objeto SFC con
+as.data.frame(SFPt)
+
+# Selección de elementos dentro de la cobertura
+Pozos <- SFPt[nombre=="Pozo",]
+```
+
+
+## Cobertura de líneas
+
+Como en matemáticas, una línea simple (o segmento de línea) está definida por las coordenadas de los vértices o dos puntos. Para el manejo de este tipo de líneas simples, *sf* maneja los objetos *Linestring*. Son segmentos libres que no presentan intersecciones ni bifurcaciones. Por su parte, el objeto *Multilinestring* agrupan segmentos *Linestring*. Para mostrar esto el siguiente código muestra cómo se crean tres objetos *Linestring* (L1, L2, L3 y L4). 
+
+```{r}
+# Se crean los tres objetos "Linestring"
+
+## Linea 1: Será la principal
+
+X1s <- c(-7,-3,1,4,1,-3,5)
+Y1s <- c(-3,-1,-3,1,5,6,11)
+Coord1 <- cbind(X1s,Y1s)
+
+# Se convierte a la clase "Linestring"
+
+L1 <- st_linestring(Coord1)
+
+class(L1)
+
+## Linea 2: Es una linea secundaria
+
+X2s <- c(-3,-2,-3,-4)
+Y2s <- c(-1,1,3,2)
+Coord2 <- cbind(X2s, Y2s)
+
+L2 <- st_linestring(Coord2)
+
+## Linea 3: Es una linea secundaria
+
+X3s <- c(4,5,4,5)
+Y3s <- c(1,-1,-2,-4)
+Coord3 <- cbind(X3s, Y3s)
+
+L3 <- st_linestring(Coord3)
+
+## Linea 4: Es una secuandaria
+
+X4s <- c(5,2,3,2)
+Y4s <- c(11,13,14,15)
+Coord4 <- cbind(X4s, Y4s)
+
+L4 <- st_linestring(Coord4)
+
+# Se crea el objeto multiple (Multilinestring()) con los objetos linestring
+
+L1L2 <- st_multilinestring(list(L1,L2))
+
+# Junta varios sfg en un sfc (colección de simple features)
+geometria2 <- st_sfc(L1,L2,L3,L4)
+```
+
+De manera análoga a lo que se realizó en la cobertura de puntos, podemos crear un dataframe o tabla de atributos a las líneas. 
+
+```{r}
+# Creación del dataframe
+
+num <- 1:4
+code <- c("p","t", "t", "t")
+tipo <- c("Pavimentada", "Terraceria","Terraceria", "Terraceria")
+tablineas <- data.frame(cbind(num,tipo,code))
+print(tablineas)
+
+# Se crea el objeto espacial
+
+SFL <- st_sf(tablineas, geometry=geometria2)
+
+plot(SFL, axes=TRUE)
+```
+
+Podemos ver su clase y darnos cuenta que es una mezcla de un objeto espacial con un dataframe o ver lo que contiene el objeto, junto a sus características.
+
+```{r}
+# Clase
+
+class(SFL)
+
+# Impresión en pantalla
+
+print(SFL)
+```
+
+Al igual que se realizó un query en los puntos, podemos hacer un filtrado de aquellas líneas que sean de interés y verlas. Por ejemplo, vamos a seleccionar y graficar las carreteras pavimentadas y de terracería usando diferentes colores:
+
+```{r}
+# Convertimos a un dataframe
+
+as.data.frame(SFL)
+
+# Filtramos aquellas carreteras pavimentadas para mostrar
+
+print(SFL[tipo=="Pavimentada",])
+
+# Coloreamos la carretera pivimentada de negro y las terciarias de rojo
+
+plot(st_geometry(SFL[tipo=="Terraceria",]),col="red",axes=TRUE)
+plot(st_geometry(SFL[tipo=="Pavimentada",]),add=TRUE)
+
+```
+
+
+## Cobertura de polígonos
+
+Para crear una cobertura de polígonos, se crean objetos *Polygon* a partir de las coordenadas de vértices que se crean una forma cerrada utilizando la función ***st_polygon()***. La secuencia de puntos en sentido de las manecillas del reloj crean polígonos que representan huecos dentro de otros polígonos y en sentido contrario para crear los contornos. Luego se agrupan los objetos en una colección utilizando la función ***st_sfc()***
+
+```{r}
+# Polígono de seis lados
+
+## Se guardan las coordenadas en vectores X y Y
+
+X1 <- c(1,3,1,-2,-4,-2,1)
+
+Y1 <- c(0,2,4,4,2,0,0)
+
+## Se combinan las coordenadas
+
+c1 <- cbind(X1, Y1)
+
+## Se muestra la clase y la matriz o arreglo
+
+print(c1)
+
+class(c1)
+
+## Se crea el objeto Polygon
+
+P1 <- st_polygon(list(c1))
+plot(P1, axes=TRUE)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Capítulo 4. Creación e intercambio de datos espaciales.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Capítulo 5. Operaciones básicas de SIG (vector).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Capítulo 6. Operaciones básicas de SIG (raster).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Capítulo 7. Elaboración de mapas.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,310 @@
+---
+lang: en
+toc: true
+number-sections: true
+toc-title: "General index"   
+crossref:
+  lof-title: "Figure index"
+  lot-title: "Table index"
+bibliography: bib/referencias.bib
+bibliographystyle: apa                  # Utiliza estilo de citacion APA
+nocite: '@*'                            # Agrega la bibliografia no citada
+format: 
+  pdf: 
+    documentclass: article
+    include-before-body: portadas/PortadaUNAL.tex
+    lof: true
+    lot: true
+    geometry: 
+      - top=25.4mm
+      - left=25.4mm
+      - right=25.4mm
+      - bottom=25.4mm
+    mainfont: "Times New Roman"
+    fontsize: 12pt
+    colorlinks: true                        # Fija las figuras en el lugar del chunk 
+header-includes:
+  - |
+    \renewcommand{\thetable}{\thesection.\arabic{table}}
+    \renewcommand{\thefigure}{\thesection.\arabic{figure}}
+    \renewcommand{\theequation}{\thesection.\arabic{equation}}
+    \makeatletter
+    \@addtoreset{table}{section}
+    \@addtoreset{figure}{section}
+    \@addtoreset{equation}{section}
+    \makeatother
+    
+    \usepackage{fancyhdr} % Configura encabezado y pie de página
+    \usepackage{ifthen} % Permite condicionales para encabezados dinámicos
+    \usepackage{float}
+    \usepackage{booktabs}
+
+    % Configuración general para el resto del documento
+    \pagestyle{fancy} 
+    \fancyhf{} % Limpia configuraciones previas
+
+    % Configuración dinámica de encabezados
+    \fancyhead[L]{%
+      \ifthenelse{\isodd{\value{page}}}{\textit{Sede Medellín}}{\thepage} % Impar: título / Par: número de página
+    }
+    \fancyhead[R]{%
+      \ifthenelse{\isodd{\value{page}}}{\thepage}{Suarez, Perez, Sanchez, Jimenez} % Impar: número de página / Par: autores
+    }
+
+    % Configuración de pies de página
+    \fancyfoot[R]{Materia} % Pie de página derecho en todas las páginas
+
+    % Líneas en el encabezado y pie de página
+    \renewcommand{\headrulewidth}{0.4pt} % Agrega línea del encabezado
+    \renewcommand{\footrulewidth}{0.4pt} % Agrega línea del pie de página
+
+    % Asegurar saltos después del contenido completo
+    \usepackage{etoolbox}
+
+    % Aplicar estilo vacío solo a las páginas de los índices
+    \pretocmd{\tableofcontents}{\thispagestyle{empty}}{}{}
+    \pretocmd{\listoffigures}{\thispagestyle{empty}}{}{}
+    \pretocmd{\listoftables}{\thispagestyle{empty}}{}{}
+
+    % Saltos después del contenido completo de índices
+    \apptocmd{\tableofcontents}{\clearpage}{}{}
+    \apptocmd{\listoffigures}{\clearpage}{}{}
+    \apptocmd{\listoftables}{\clearpage}{}{}
+editor: source
+---
+
+# Loading of packages or libraries
+
+To load packages, you can use the following code, where you put the required package in quotes and it will be loaded automatically.
+
+
+```{r include=FALSE}
+rm(list = ls())
+if(!require(pacman)){install.packages("pacman"); library(pacman)}
+pacman::p_load("dplyr", "tidyverse","kable", "knitr", "kableExtra", "labelled",
+               
+               "rstatix", "lme4", "broom", "rstan", "lmer", "bayesplot", "loo",
+               "ggplot2")
+
+options(kableExtra.latex.load_packages = F)
+
+knitr::opts_chunk$set(fig.path = 'figurasR/',
+                      echo = FALSE, warning = FALSE, message = FALSE,
+                      comment = NA,
+                      fig.align="center",
+                      cache=FALSE, webshot = "webshot") # 
+
+knitr::write_bib(c(.packages(),"knitr","rmarkdown"),file="bib/paquetes.bib", width = 60)
+```
+
+# Data
+
+Consider the following data tha are obtained from the web "http://alecri.github.io/downloads/data/dental.RData". 
+
+```{r}
+# Load of data
+
+load(url("http://alecri.github.io/downloads/data/dental.RData"))
+```
+
+They correspond to a subset called "dental". Pay atention to the way of adding bobbins, can be usuful for things listed.  
+
+The dental dataset contains the following variables:
+
+-   id = a sequential number of measurements;
+
+-   sex = sex, a factor with categories: 
+
+    - 0 = “Girl”, 
+    - 1 = “Boy”;
+  
+-   y8 = Measure at age 8;
+
+-   y10 = Measure at age 10;
+
+-   y12 = Measure at age 12;
+
+-   y14 = Measure at age 14.
+
+
+To write thing in bold, can be use two ways:
+
+**Measument 1**
+
+\textbf{Measument 1}
+
+To write thing in italic, can be use two ways:
+
+
+*Measument 2*
+
+\textit{Measument 2}
+
+
+Also, can be combine bold and italic
+
+***Measumen 3***
+
+
+\textbf{\textit{Measument 3}}
+
+
+For to underline, can be use:
+
+\underline{Measument 3}
+
+In general, many latex codes can be used in the document. 
+
+\newpage
+
+# Tables in quarto
+
+**Head of data**
+
+If, you have a data frame in R, then can print a table, this way:
+
+```{r, table0}
+kable(head(dental), format = "latex", booktabs = TRUE, env = "supertabular", caption = "First observations in wide format") %>%
+  kable_styling(latex_options = c("striped", "scale_down", "landscape", "HOLD_position"))
+```
+
+Note that in the configuration of chunk is the key: "table0". It is used for make a crossreference of table. For example: "In the table \ref{tab:table0}, we can see the first observatios of the dental dataset" 
+
+The data are presented in a wide format, but to analyze longitudinal data it is importan transform the data into a large format. The following code allows you to do so:
+
+```{r}
+dental_long <- pivot_longer(dental, cols = starts_with("y"), 
+                            names_to = "measurement", values_to = "distance") %>% 
+  mutate(
+    age = parse_number(measurement),
+    measurement = fct_inorder(paste("Measure at age", age))
+  ) %>% 
+  set_variable_labels(
+    age = "Age of the child at measurement",
+    measurement = "Label for time measurement",
+    distance = "Measurement"
+  )
+```
+
+```{r, table1}
+kable(head(dental_long, 10), format = "latex", booktabs = TRUE, env = "supertabular", caption = "First observations in large format") %>%
+  kable_styling(latex_options = c("striped", "scale_down", "landscape", "HOLD_position"))
+```
+
+In the \ref{tab:table1}, note that the data had changed to large format. 
+
+The argument "HOLD_position" in latex_options sets the position of tables and "hold_position" allows a table to float. You can see more information in the arguments of "kable_styling" function. 
+
+
+**Summary statistics**
+
+Other way of make tables in Quarto is with Latex. It consider the next code of statistics:
+
+```{r}
+summary <- group_by(dental_long, age) %>% 
+  get_summary_stats(distance)
+```
+
+We might be interested in putting it in a results table. For this we will use the following Latex code:
+
+```{=latex}
+\begin{table}[H]
+    \centering
+    \caption{Summary Statistics of Distance by Age Group}
+    \label{tab:distance_summary}
+    \begin{tabular}{cc rrrrrrrr}
+        \toprule
+        \textbf{Age} & \textbf{Variable} & \textbf{n} & \textbf{Min} & \textbf{Max} & \textbf{Median} & \textbf{q1} & \textbf{q3} & \textbf{iqr} & \textbf{mad} \\
+        \midrule
+        8 & distance & 27 & 16.5 & 27.5 & 22 & 21.0 & 23.25 & 2.25 & 1.483 \\
+        10 & distance & 27 & 19.0 & 28.0 & 23 & 21.5 & 24.50 & 3.00 & 2.224 \\
+        12 & distance & 27 & 19.0 & 31.0 & 24 & 23.0 & 26.00 & 3.00 & 2.224 \\ % This is your problematic line 488
+        14 & distance & 27 & 19.5 & 31.5 & 26 & 25.0 & 27.75 & 2.75 & 2.224 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+```
+
+
+Note that the key are in `\label{tab:distance_summary}`. For instance: "Some measuments of central tendency are in the table \ref{tab:distance_summary}"
+
+
+# Plots in quarto
+
+To create plots in quarto is very easy, the structure is the same that rmarkdown. The next code show how to create a plot:
+
+```{r}
+#| label: fig-figura0
+#| fig-cap: "Boxplots"
+ggplot(dental_long, aes(measurement, distance, fill = measurement)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.2) +
+  guides(fill = "none") +
+  labs(x = "", y = "Dental growth, mm")
+```
+
+If you have many plots and wish to put in the same shape, you can use this code:
+
+```{r, fig.pos="H"}
+#| label: fig-figura2
+#| fig-cap: "Two plots"
+#| fig-subcap:
+#|  - "First plot"
+#|  - "Second plot"
+#| layout-ncol: 2
+ggplot(dental_long, aes(measurement, distance, fill = measurement)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.2) +
+  guides(fill = "none") +
+  labs(x = "", y = "Dental growth, mm")
+ggplot(dental_long, aes(sex, distance, fill = measurement)) +
+  geom_boxplot() +
+  labs(x = "", y = "Dental growth, mm", fill = "")
+```
+
+
+The argument "fig.pos="H"" in the chunk sets the position of figures and "fig.pos="h"" allows a figure to float. 
+
+
+# Equations in quarto
+
+In statistic the equations are very important for describe relations, situations, models, theories, cumputes, events, sujets, among others things. In Quarto the way for to expressing equations is:
+
+$$
+\mathbf{y} = \mathbf{X}\boldsymbol{\beta} + \mathbf{Z}\mathbf{u} + \boldsymbol{\epsilon}
+$$ {#eq-ecuacion1}
+
+where:
+
+```{=latex}
+\begin{itemize}
+    \item $\mathbf{y}$ is the vector of observed responses.
+    \item $\mathbf{X}$ is the design matrix for the fixed effects.
+    \item $\boldsymbol{\beta}$ is the vector of fixed-effects coefficients.
+    \item $\mathbf{Z}$ is the design matrix for the random effects.
+    \item $\mathbf{u}$ is the vector of random-effects coefficients.
+    \item $\boldsymbol{\epsilon}$ is the vector of residual errors.
+\end{itemize}
+```
+
+The key is "equation1". To create a cross-reference, we use the following: The equation @eq-ecuacion1 show a linear mixed model. 
+
+
+# Page of Quarto
+
+The website https://quarto.org/ offers numerous resources on quarto. There you can find information to use in your documents. It also offers numerous examples on various topics of interest.
+
+
+# Bibliography
+
+
+
+
+
+
+
+
+
+
+
+
