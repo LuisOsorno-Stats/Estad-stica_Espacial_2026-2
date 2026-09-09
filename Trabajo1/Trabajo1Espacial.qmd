@@ -7,7 +7,7 @@ format: typst
 ```{r include=FALSE}
 rm(list = ls())
 if(!require(pacman)){install.packages("pacman"); library(pacman)}
-pacman::p_load("sf")
+pacman::p_load("sf", "raster")
 
 options(kableExtra.latex.load_packages = F)
 
@@ -19,14 +19,6 @@ knitr::opts_chunk$set(fig.path = 'figurasR/',
 
 knitr::write_bib(c(.packages(),"knitr","rmarkdown"),file="bib/paquetes.bib", width = 60)
 ```
-
-
-
-
-# Introducción
-
-Este documento utiliza el motor de Typst actualizado.
-
 
 
 
@@ -329,24 +321,206 @@ P1 <- st_polygon(list(c1))
 plot(P1, axes=TRUE)
 ```
 
+Luego de haber creado el polígono anterior, el cual es relativamente sencillo, se procede a crear uno más elaborado.
+
+```{r}
+# Polígono principal
+
+X2 <- c(5,12,12,7,7,5,2,5)
+Y2 <- c(-2,-2,3,2,5,7,4,-2)
+c2 <- cbind(X2, Y2)
+
+# Polígono secundario
+
+X3 <- c(4,5,4,3,4)
+Y3 <- c(2,3,4,3,2)
+c3 <- cbind(X3,Y3)
+
+# Polígono secundario
+
+X4 <- c(6,8,7,8,6,6)
+Y4 <- c(-1,-1,0,1,1,-1)
+c4 <- cbind(X4, Y4)
+
+P2 <- st_polygon(list(c2, c3, c4))
+plot(P2, axes=TRUE)
+
+```
+
+```{r}
+# Este gráfico es el principal anterior, pero está vez no es hueco
+
+c3i <- c3[nrow(c3):1, ] # Invierte el orden de las coordenadas
+P3 = st_polygon(list(c3i))
+
+c4i <- c4[nrow(c4):1, ] # Invierte el orden de las coordenadas
+P4 = st_polygon(list(c4i))
+
+plot(P3)
+plot(P4)
+```
 
 
+Otro polígono por ejemplo es:
+
+```{r}
+# Polígono principal
+
+X5 <- c(1,3,14,14,-4,-4,-3,-4,2,-1,1)
+Y5 <- c(-3,-2,-3,13,13,1,-3,-4,-6,-1,-3)
+c5 <- cbind(X5, Y5)
+
+P5 <- st_polygon(list(c5))
+
+plot(P5, axes=TRUE)
+```
+
+Al combinar todas las geometrías en un mismo gráfico, obtenemos:
+
+```{r}
+# Se combinan todos los objetos sfg en un sfc
+
+geometria3 <- st_sfc(P5, P1, P2, P3, P4)
+plot(geometria3, axes=T)
+```
+
+Usando los dataframe, vamos a crear información adicional sobre los gráficos realizados:
+
+```{r}
+# dataframe
+
+ID = c(1, 2, 3, 4, 5)
+code = c("B","U", "U", "L", "L")
+tipo = factor(c("Bosque","Urbano", "Urbano", "Lago", "Lago"))
+tabpol <- data.frame(cbind(ID,code,tipo))
 
 
+# sf object
 
+SFPol <- st_sf(tabpol, geometry = geometria3)
+plot(SFPol,axes=TRUE)
+```
 
+Veamos la clase del objeto *SFPol*, su composición y un resumen:
 
+```{r}
+# Clase
 
+class(SFPol)
 
+# Elementos en él
 
+print(SFPol)
 
+# Un summary
 
+summary(SFPol)
+```
 
+De manera similar, vamos a realizar un filtrado del mapa, según elementos de interés. Para este caso, visualizaremos los lagos
 
+```{r}
+# Extraemos el dataframe
 
+as.data.frame(SFPol)
 
+# Podemos filtrar el gráfico de acuerdo a una región de interés
 
+print(SFPol[tipo=="Urbano",])
+```
 
+```{r}
+# Graficamos los lagos
+
+Lago <- SFPol[tipo=="Lago",]
+plot(st_geometry(SFPol),axes=FALSE); plot(Lago,add=TRUE, col = "blue4")
+```
+
+Finalmente, se pueden mezclar todas las geometrías exploradas:
+
+```{r}
+Todo <- st_sfc(P1,P2,P3,L1,L2,Pt1,Pt3)
+plot(Todo,border="red",axes=F)
+```
+
+## Datos raster
+
+Los datos en formato raster son definidos a través de una rejilla rectangular o pixeles. El paquete **raster** permite manejar los datos raster con el objeto *RasterLayer*. Podemos definir el raster con una matriz de datos que contiene los valores en cada una de las celdas. La expansión espacial se hace con la función ***extent()***, definiendo claramente las coordenadas extremas.
+
+```{r}
+# Creamos la matriz usando valores aleatorios
+
+set.seed(12345)
+m <- matrix(rpois(20, 6), ncol = 5, byrow = TRUE)
+m
+```
+
+```{r}
+# Visualizamos la matriz
+
+r <- raster(m)
+extent(r) <- extent(c(0,4, 0,4))
+
+plot(r)
+```
+
+Similarmente a como se realizó para los objetos anteriores, podemos obtener información del raster.
+
+```{r}
+# La clase
+
+class(r)
+```
+
+```{r}
+# Su impresión en pantalla
+
+print(r)
+```
+
+```{r}
+# La dimensión
+
+dim(r)
+```
+
+```{r}
+# Número de filas
+
+nrow(r)
+
+# Número de columnas
+
+ncol(r)
+```
+
+```{r}
+# Su extensión
+
+extent(r)
+```
+
+```{r}
+# Valor mínimo y máximo en las celdas
+
+cellStats(r, "min")
+
+cellStats(r, "max")
+```
+
+```{r}
+# Su histograma
+
+hist(r)
+```
+
+Los raster se pueden convertir a dataframes
+
+```{r}
+as.data.frame(r, xy=TRUE)
+```
+
+Con esto se concluye la revisión y reproducción del capitulo 3
 
 
 # Capítulo 4. Creación e intercambio de datos espaciales.
