@@ -532,20 +532,84 @@ rm(list = ls())
 
 # Capítulo 4. Creación e intercambio de datos espaciales.
 
+La idea de este capítulo es explorar los formatos raster y vector, veremos cómo importar y exportar archivos en dicho formato.
 
 
+## Creación de una cobertura de puntos
+
+Encontrar datos espaciales en formato de texto es algo que ocurre comúnmente, los cuales corresponden a descripciones o coordenadas de puntos de interés. Un caso simple, corresponde a las observaciones de fauna y flora. La idea del siguiente ejemplo es crear una cobertura de puntos para la ocurrencia del puma (Puma concolor). Los datos fueron obtenidos del portal Global Biodiversity Information Facility (GBIF, https://www.gbif.org) para México (periodo 2000-2021) en formato “.csv”. 
 
 
 ```{r}
+# Se obtiene el path de una base de datos almacenada en github
 
+path1 <- "https://github.com/LuisOsorno-Stats/Estad-stica_Espacial_2026-2/raw/main/Trabajo1/Datos/Puma_concolor.csv"
+
+# Se lee el conjunto de datos
+
+tab_puma <- read.csv(path1)
+
+# Se muestran los nombres de las variables
+
+names(tab_puma)
 ```
 
+```{r}
+# Se muestra el encabezado de la base de datos
+
+head(tab_puma)
+```
+
+```{r}
+# Se carga el paquete sf
+
+library(sf)
+
+# Conversión del dataframe en sf, indicar columnas de X y Y,
+# 4326 es el número EPSG de LatLong WGS84
+pts_puma <- st_as_sf(tab_puma, coords = c("decimalLongitude",
+"decimalLatitude"), crs = 4326)
+
+# Se muestra su clase
+
+class(pts_puma)
+```
+
+```{r}
+# Vemos el encabezado
+
+head(pts_puma)
+```
+
+Finalmente, después de pasar las coordenadas geográficas y georeferenciarlas a WGS84, se grafican:
+
+```{r}
+# Plotea el mapa (un mapa para cada campo)
+plot(pts_puma)
+```
+
+El cual corresponde a graficar los puntos en el lienzo y colorearlos de acuerdo a las categorías en cada variable. 
 
 
+## Importación de archivos shape
 
+El formato shapefile es un tipo de archivo para datos espaciales muy utilizado y desarrollado por la compañía ESRI. Está compuesto principalmente por tres archivos:
 
+- **.shp:** el cual almacena las entidades geométricas de los objetos
 
+- **.shx:** el cual almacena el índice de las entidades geométricas
 
+- **.dbf:** el cual almacena la tabla de los atributos de los objetos
+
+Es recomendable trabajar con un cuarto archivo **.prj** que almacena el sistema de referencia con el cual se está trabajando. 
+
+Para trabajar con los archivos shapefile, usaremos la librería **sf**, por su facilidad en el momento de trabajar con objetos espaciales, como lo son los puntos, las lineas y los polígonos asociados (o no) a las tablas de atributos o dataframes.
+
+```{r}
+# En este script vamos a leer un archivo shp que se encuentra en github
+
+path2 <- 
+```
 
 
 
