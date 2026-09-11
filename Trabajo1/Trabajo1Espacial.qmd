@@ -523,9 +523,22 @@ as.data.frame(r, xy=TRUE)
 Con esto se concluye la revisión y reproducción del capitulo 3
 
 
+```{r}
+# Se eliminan los elementos en el environment para que la sección
+# sea más liviana
+
+rm(list = ls())
+```
+
 # Capítulo 4. Creación e intercambio de datos espaciales.
 
 
+
+
+
+```{r}
+
+```
 
 
 
