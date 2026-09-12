@@ -522,13 +522,13 @@ as.data.frame(r, xy=TRUE)
 
 Con esto se concluye la revisión y reproducción del capitulo 3
 
-
 ```{r}
 # Se eliminan los elementos en el environment para que la sección
 # sea más liviana
 
 rm(list = ls())
 ```
+
 
 # Capítulo 4. Creación e intercambio de datos espaciales.
 
@@ -543,7 +543,7 @@ Encontrar datos espaciales en formato de texto es algo que ocurre comúnmente, l
 ```{r}
 # Se obtiene el path de una base de datos almacenada en github
 
-path1 <- "https://github.com/LuisOsorno-Stats/Estad-stica_Espacial_2026-2/raw/main/Trabajo1/Datos/Puma_concolor.csv"
+path1 <- "https://github.com/LuisOsorno-Stats/Estad-stica_Espacial_2026-2/raw/main/Trabajo1/DatosCap4/Puma_concolor.csv"
 
 # Se lee el conjunto de datos
 
@@ -608,7 +608,7 @@ Para trabajar con los archivos *shapefile*, usaremos la librería **sf**, por su
 ```{r}
 # Se lee el archivo usando la función st_read
 
-mx <- st_read("Datos/Entidades_latlong.shp")
+mx <- st_read("DatosCap4/Entidades_latlong.shp")
 ```
 
 Con el procedimiento anterior podemos leer los archivos *shapefile* usando la función ***st_read()*** de la librería **sf**
@@ -638,7 +638,7 @@ En la lista de 10, algunos drivers soportan formatos raster y vector. La funció
 ```{r}
 # Leamos un archivo gpkg
 
-path3 <- "https://github.com/LuisOsorno-Stats/Estad-stica_Espacial_2026-2/raw/main/Trabajo1/Datos/mx.gpkg"
+path3 <- "https://github.com/LuisOsorno-Stats/Estad-stica_Espacial_2026-2/raw/main/Trabajo1/DatosCap4/mx.gpkg"
 
 mx <- st_read(path3)
 ```
@@ -650,10 +650,10 @@ De una manera análoga a como se pueden guardar bases de datos o dataframes en f
 ```{r}
 # Guardar el objeto en formato shape
 
-st_write(mx,"Datos/mexico.shp", delete_layer = TRUE)
+st_write(mx,"DatosCap4/mexico.shp", delete_layer = TRUE)
 
 # Salva el objeto en formato GPKG
-st_write(mx, dsn = "Datos/mx.gpkg", delete_layer = TRUE)
+st_write(mx, dsn = "DatosCap4/mx.gpkg", delete_layer = TRUE)
 ```
 
 Una gran ventaja de usar GeoPackage (.gpkg) en comparación con el archivo shapefile es que permite almacenar 140 TB (en vez de 2 GB en los shapes). Lo cual es una ventaja enorme, además que está formado por un solo archivo y no tres. 
@@ -682,6 +682,7 @@ plot(mx, axes = T, cex.axis=0.8)
 
 ```{r}
 # Grafica solamente la geometría del mapa, sin colorear ni rellenar
+
 plot(st_geometry(mx))
 ```
 
@@ -704,7 +705,7 @@ Cuando los archivos no contienen el sistema de referencia, la función ***st_crs
 # Se lee el archivo y se nota que no contiene información sobre el sistema
 # de referencia en contraste con el archivo mx leído antes
 
-carr <- st_read("Datos/carretera.shp")
+carr <- st_read("DatosCap4/carretera.shp")
 ```
 
 ```{r}
@@ -723,6 +724,7 @@ La función ***st_is_invalid()*** detecta errores de geometría como interseccio
 
 ```{r}
 # Test de la validez de los mapas
+
 st_is_valid(mx)
 ```
 
@@ -747,7 +749,7 @@ La transformación de objetos espaciales entre paquetes es muy importante y nece
 ```{r}
 # Se carga la libreria sp
 
-library(sp)
+# library(sp)
 
 # Se transforma de sf a sp
 
@@ -759,12 +761,58 @@ mx_sf <- st_as_sf(mx_sp, "sf")
 ```
 
 
+## Importación / exportación de datos raste
+
+Los objetos raster se pueden manejar usando el paquete **raster**, donde la función ***raster()*** permite la importación de imágenes en muchísimos formatos de imagen en los objetos *RasterLayer*. La escritura de puede hacer con la función ***writeRaster()***, guardandolos en muchos formatos de imagén como  ENVI, ESRI, ERDAS, GeoTiff, GeoJSON, GPKG, IDRISI, SAGA, entre otros. 
+
+```{r}
+# Se carga la librería raster
+
+# library(raster)
 
 
+# Se obtiene el path de la imagen almacenada en github
 
+path4 <- "https://github.com/LuisOsorno-Stats/Estad-stica_Espacial_2026-2/raw/main/Trabajo1/DatosCap4/DEM_GTOPO1KM.tif"
 
+dem <- raster(path4)
 
+# Se verifica su clase
 
+class(dem)
+```
+
+```{r}
+# Se grafica
+
+plot(dem)
+```
+
+Veamos la extensión o dimensión de la imagen.
+
+```{r}
+extent(dem)
+```
+
+Algunos de los formatos disponibles para guardar la imagen.
+
+```{r}
+# Formatos disponibles para suardar
+writeFormats()
+```
+
+```{r}
+# Guardamos el raster en formato GPKG
+writeRaster(dem, filename="DatosCap4/DEM_Mx.gpkg", format="GPKG",
+            overwrite=TRUE, datatype="INT2S")
+```
+
+```{r}
+# Se eliminan los elementos en el environment para que la sección
+# sea más liviana
+
+rm(list = ls())
+```
 
 
 # Capítulo 5. Operaciones básicas de SIG (vector).
