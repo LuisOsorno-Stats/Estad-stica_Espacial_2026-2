@@ -585,6 +585,7 @@ Finalmente, después de pasar las coordenadas geográficas y georeferenciarlas a
 
 ```{r}
 # Plotea el mapa (un mapa para cada campo)
+
 plot(pts_puma)
 ```
 
@@ -665,6 +666,7 @@ Para explorar los datos espaciales con **sf**, existen algunas funciones que per
 
 ```{r}
 # Ver la clase del objeto espacial
+
 class(mx) 
 ```
 
@@ -744,7 +746,7 @@ min(st_is_valid(mx))
 min(st_is_valid(carr))
 ```
 
-La transformación de objetos espaciales entre paquetes es muy importante y necesaria, porque hay funciones que solo están disponibles en un paquete y no existe su homologa en el otro. Por ejemplo, entre *sp* y *sf*, se puede realizar la transformación usando la función ***as()***; por su parte en el paquete sf se utiliza la función ***st_as_sf()*** para llevarlo a formato *sf*.
+La transformación de objetos espaciales entre paquetes es muy importante y necesaria, porque hay funciones que solo están disponibles en un paquete y no existe su homologa en el otro. Por ejemplo, entre **sp** y **sf**, se puede realizar la transformación usando la función ***as()***; por su parte en el paquete sf se utiliza la función ***st_as_sf()*** para llevarlo a formato **sf**.
 
 ```{r}
 # Se carga la libreria sp
@@ -818,55 +820,650 @@ rm(list = ls())
 # Capítulo 5. Operaciones básicas de SIG (vector).
 
 
+En este capítulo se explorarán algunas de las operaciones básicas para trabajar con formato vector en el análisis espacial. La idea es trabajar con funciones del paquete **sf**, el cual se ha empleado recurrentemente antes.
+
+## Datos “minimalistas”
+
+Las figuras geométricas poseen muchas propiedades y medidas. En esta sección trabajaremos con datos minimalistas o de juguete, para explorar las funciones del paquete **sf**. Veremos funciones para verificar la geometría de los objetos, longitud de las líneas, área de polígonos, entre otros. Nuevamente veremos una manera de crear mapas con los objetos espaciales que hemos desarrollado.   
+
+```{r}
+# Se carga la librería sf
+# library(sf)
+
+# Mapa puntos
+
+SFP <- st_read("DatosCap5/SFP.shp")
+```
+
+```{r}
+# Mapa líneas
+
+SFL <- st_read("DatosCap5/SFL.shp")
+```
 
 
+```{r}
+# Mapa polígonos
+
+SFPol <- st_read("DatosCap5/SFPol.shp")
+```
+
+Es importante notar que en los tres objetos procesados anteriormente no existe un sistema de coordenadas de referencia, note que CRS:NA
+
+Procedemos a evaluar la validez de los objetos
+
+```{r}
+# Test de la validez de polígonos
+
+st_is_valid(SFPol)
+
+# Test si líneas son simples
+
+st_is_simple(SFL)
+
+```
+
+Cuando se tiene polígonos, podemos calcular su área con la función ***sf_area()***
+
+```{r}
+# Calcula área de polígonos
+
+st_area(SFPol)
+```
 
 
+De manera análoga podemos calcular la longitud de una linea con una función ***st_lenght()***
 
 
+```{r}
+# Calcula longitud líneas
+
+st_length(SFL)
+```
+
+Incorporando los elementos explorados anteriormente, vamos a combinarlos para crear un mapa.
+
+```{r}
+# Mapa de los datos
+
+plot(SFPol["ID"],col=c("#FF7F00","#FF3030","#B23AEE","#C0FF3E"))
+
+plot(st_geometry(SFP),add=TRUE)
+plot(st_geometry(SFP) + c(0.5,0),add=TRUE,pch=c(49,50,51),cex=1)
+plot(st_geometry(SFL),add=TRUE,lty=2,lwd = 2,col="red")
+
+# Agrega el número de las líneas
+
+text(5,5.5,"1",pos=4,col="red",cex=1)
+text(1.2,3,"2",pos=4,col="red",cex=1)
+text(7.8,6,"3",pos=4,col="red",cex=1)
+
+```
 
 
+## Consulta sobre intersecciones
+
+Las intersecciones entre objetos espaciales se puede consultar de varias maneras con el paquete **sf**. La función ***st_intersects()*** permite ver si dos objetos espaciales se interceptan o no. Dicha función tiene una opción llamada *sparce* para configurar la manera en que se muestran los resultados de la función, si se establece como: *sparse = FALSE* los resultados se muestran como una matriz; si se establece como *sparse = TRUE* los resultados aparecen de manera condensada. Existe otra manera de calcular "intersecciones" entre objetos espaciales, es midiendo distancias euclidianas con la función ***st_distance()***. Veamos algunas salidas:
 
 
+```{r}
+## Muestra valores TRUE o False
+# Intersección de puntos y polígonos
+
+st_intersects(SFP, SFPol, sparse = FALSE)
+```
+
+```{r}
+# Forma condensada de la funcion st_intersects()
+
+st_intersects(SFP, SFPol, sparse = TRUE)
+```
 
 
+```{r}
+# Intersección de líneas y polígonos
+st_intersects(SFL, SFPol, sparse = FALSE)
+```
 
+```{r}
+# Forma condesada de la intersección de lineas y poligonos
 
+st_intersects(SFL, SFPol, sparse = TRUE)
+```
 
+```{r}
+# Distancia más corta entre elementos de dos objetos
 
+st_distance(SFP, SFPol)
+```
 
+## Intersección geométrica
 
+La última función que veremos es la intersección geométrica entre dos objetos espaciales, para ello emplearemos la función ***st_intersection()*** que combina las geometrías espaciales y los atributos (dataframes) que poseen ambos objetos donde se sobreponen. En el siguiente código veremos cómo calcular la longitud de los segmentos que coinciden espacialmente con
+las diferentes categorías de los polígonos.
+
+```{r}
+# Operadores geométricos (intersección geométrica)
+
+SFPxSFPol <- st_intersection(SFP,SFPol)
+
+print(SFPxSFPol)
+```
+
+```{r}
+# Se hace una intersección entre puntos y líneas
+
+SFLxSFPol <- st_intersection(SFL,SFPol)
+
+print(SFLxSFPol)
+```
+
+```{r}
+# Se grafica la intersección
+
+plot(SFLxSFPol["tipo.1"],lwd=3, key.width = lcm(3.5))
+```
+
+```{r}
+# Extraemos solo las líneas
+
+SFLxSFPol_l <- st_collection_extract(SFLxSFPol,type="LINESTRING")
+
+# Se calcula la longitud y se almacena en una columna
+
+SFLxSFPol_l$long <- st_length(SFLxSFPol_l) 
+```
+
+Finalmente, calculamos la longitud para cada uno de los segmentos segregados por Agricultura o Bosque.
+
+```{r}
+# Suma la longitud de los segmentos de cada tipo de cubierta
+
+Suma_l <- aggregate(long ~ tipo.1, FUN = "sum", data = SFLxSFPol_l)
+print(Suma_l)
+
+```
 
 
 # Capítulo 6. Operaciones básicas de SIG (raster).
 
+La idea de este capítulo es explorar y tratar los objetos tipo *raster*, comúnmente utilizados en el análisis espacial. Al igual que en el capítulo anterior sobre objetos tipo SIG (vector), la idea es explorar algunas funciones del paquete **raster** que permite trabajar con objetos espaciales. Para ello, igualmente trabajaremos con datos *minimalistas*. Para ilustrar las metodologías, usaremos datos reales del suelo del estado de Michoacán, México. 
+
+## Datos “minimalistas”
+
+Vamos a crear un conjunto de datos *raster* de baja dimensión (3x4), para mostrar los resultados obtenidos, pensado los datos *raster* como matrices. Creemos dos matrices que transformaremos en objetos *raster* gracias a la función ***raster()***, luego asignaremos coordenadas extremas al objeto *raster* con ***extent()***
+
+```{r}
+# Se carga la libreria raster
+
+library(raster)
+
+############## Datos muy sencillos
+
+# Creamos matrices a partir de números aleatorios de una poisson y binomial
+
+set.seed(12345)
+m1 <- matrix(rpois(20, 4.5),ncol=4,nrow=5,byrow=TRUE)
+m2 <- matrix(rbinom(20, prob=0.7, size=10),ncol=4,nrow=5,byrow=TRUE)
+
+# Observamos la primer matriz
+
+print(m1)
+```
+
+```{r}
+# Observamos la segunda
+
+print(m2)
+```
+
+```{r}
+# Se convierten en objetos raster
+
+r1 <- raster(m1)
+
+r2 <- raster(m2)
+
+# Se le dan las dimensiones
+
+extent(r1) <- extent(r2) <- extent(c(0,4,0,5))
+```
+
+Un tipo de manejo de los datos *raster* es manipularlos como imágenes multibanda con ***stack()*** o con ***brick()***. Difieren que un *RasterBrick* solo se pueden vincular a un único archivo multicapa; por el contrario los *RasterStack* se manejan como una colección o una lista de objetos *RasterLayer* con la misma extensión espacial y resolución. Un objeto *RasterStack* se puede formar a través de una colección de archivos en diferentes ubicaciones, combinándolos con objetos tipo *RasterLayer* que solo existan en RAM. En consecuencia, un *RasterBrick* es un objeto de varias capas y su procesamiento puede ser más eficiente que procesar un *RasterStack*que representa a los mismos datos.
+
+```{r}
+# Definimos una paleta de 12 colores
+
+paleta_colores <- terrain.colors(12)
+
+# Se crean los objetos colortable
+
+colortable(r1) <- paleta_colores
+
+colortable(r2)<- paleta_colores
+
+# Se aplica el stack
+
+r12 <- raster::stack(r1,r2)
+
+# Se verifica su clase
+
+class(r12)
+```
+
+```{r}
+# Graficamos el stack
+
+plot(r12,axes=TRUE)
+```
+
+```{r}
+r12b <- brick(r1,r2)
+class(r12b)
+
+```
+
+Las funciones ***res()***, ***dim()*** y ***xmax()*** permiten obtener algunas de las características de los mapas como resolución (tamaño de las celdas), dimensión (número de filas, columnas y bandas) y coordenadas extremas. ***cellStats()*** permite calcular índices estadísticos sobre el conjunto de la imagen (tomando en cuenta todas las celdas).
+
+```{r}
+# Características del raster
+
+# Resolución
+
+res(r1)
+```
+
+```{r}
+# Dimensión del objeto raster
+
+dim(r12)
+```
+
+```{r}
+# existen también xmax, ymin y ymax para medidas específicas 
+
+xmax(r1) 
+```
+
+```{r}
+# Máximo de los pixeles
+
+cellStats(r12,"max")
+```
+
+```{r}
+# Suma de los pixeles
+
+cellStats(r1,"sum")
+```
+
+```{r}
+# Desviación estándar de los pixeles
+
+cellStats(r1,"sd")
+```
 
 
+## Álgebra de mapa
+
+A los *raster* se les pueden aplicar funciones u operaciones de un SIG. Es decir, podemos sumar dos *raster* entre sí, multiplicar o sumarle constantes a un *raster*, con la función ***overlay()*** se pueden programar funciones personalizadas, entre otras operaciones, aplicandose pixel por pixel. Veamos algunos ejemplos de ello.
+
+- **Sumar** una constante a un *raster*
+
+```{r}
+# Suma
+
+sum1 <- r1 + 2
+
+print(as.matrix(sum1))
+```
+
+- **Sumar dos raster**
+
+```{r}
+# Sumar dos rasters
+
+sum2 <- r1 + 2*r2
+
+print(as.matrix(sum2))
+```
+
+- **Función personalizada** para operar con rasters
+
+```{r}
+# Aplicar la función f(x,y,z) a tres raster 
+
+sum3 <- overlay(r1, r2, sum1, fun=function(x, y, z){ x + 2*y -z})
+
+print(as.matrix(sum3))
+```
 
 
+## Corte y mosaico
+
+Unir mapas es una actividad común y que se requiere con cierta regularidad, al igual que se puede hacer con la función ***merge()*** o los con **join** en *tidyverse*, existe un análogo en el manejo de datos espaciales, que igualmente se llama ***merge()***. Inversamente, ***crop()*** nos permite recortar una imagen recibiendo como argumentos las coordenadas extremas. Dichas operaciones se basan en el *extent* de los mapas, requiriendo las coordenadas extremas esquinas inferior izquierda y superior derecha en el orden *xmin*, *xmax*, *ymin* e *ymax*. Por ejemplo:
+
+```{r}
+# Operaciones tipo SIG
+# Mosaico (merge) y recorte (crop)
+# Extent de r1 (xmin, xmin, ymin, ymax)
+extent(r1)
+```
+
+```{r}
+# Creamos una tercera matriz de manera aleatoria
+
+set.seed(12345)
+
+m3 <- matrix(rpois(20, 6),ncol=4,nrow=5,byrow=TRUE)
+
+print(m3)
+```
+
+```{r}
+# Se transforma en un objeto raster
+
+r3 <- raster(m3)
+
+# extent(xmin, xmax, ymin, ymax) ubicándolos al sur
+
+extent(r3) <- extent(c(0,4,-5,0))
+
+# Creamos el mosaico
+
+mosaico <- merge(r1,r3)
+
+# Verificamos su extent
+
+extent(mosaico)
+```
+
+```{r}
+# Miramos la unión de los rasters
+
+print(as.matrix(mosaico))
+```
+
+```{r}
+# Recortemos el mosaico, definimos las coordenadas
+
+extent_corte <- extent(c(2,4,-3,2))
+
+# Recortamos de acuerdo a las coordenadas
+
+corte <- crop(mosaico,extent_corte)
+
+# Imprimimos los resultados
+
+print(as.matrix(corte))
+```
+
+## Reclasificación
+
+El proceso de reclasificación o reasignación de valores en las matrices, es muy importante porque modifica valores existentes y los reemplazan; en el manejo de *rasters*, se opera de manera similar. Para el ejemplo a continuación, consideremos el *raster* **r1** que creamos anteriormente; aquellos elementos en el raster que tengan un valor estrictamente menor que 6, se les asignará un valor de 5. 
+
+```{r}
+# Veamos el raster r1
+
+print(as.matrix(r1))
+```
+
+```{r}
+# Apliquemos la reasignación al raster r1
+
+r1[r1 > 5] <- 6
+print(as.matrix(r1))
+```
+
+El reclasificador anterior, involucra un solo intervalo para el cual cada elemento del *raster* se debe testar, es decir, si el valor en cada celda es mayor que 5, entonces se reemplaza por un 6. El problema ocurre cuando se requiere verificar un conjunto de celdas o una celda específica, esto involucra varios intervalos que se deben testar de manera simultanea. Para resolver esto, se utilizan tablas de reclasificación; estas tablas se definen con tres columnas, donde las dos primeras indican los extremos del intervalo y la tercera el valor por el cual se requiere reemplazar. El siguiente ejemplo, en la tabla *tabla_reclas* se establecen las condiciones de reclasificación; en la primera fila se indica que: se va a testar en el intervalo 0 a 6 (dos primeras columnas), es decir que, se evalúan todos los elementos en el mosaico y si el valor de una celda está entre 0 (incluido) y 6 (sin incluirlos), entonces se reemplaza por un 0 (tercera columna. Luego, si se observa la segunda fila, si el valor de una celda está entre 6 y 20 (primera y segunda columan respectivamente), nuevamente incluyendo al 6 y sin incluir al 20, entonces se reemplaza por un 1 (tercera columna)
+
+```{r}
+# Tabla de reclasificación (rangos)
+
+m <- c(0, 6, 0, 6, 20, 1)
+
+tabla_reclas <- matrix(m, ncol=3, byrow=TRUE)
+
+# Se muestra la tabla de reclasificación
+
+print(tabla_reclas)
+```
+
+```{r}
+# Se implementa la tabla de reclasicación en el mosaico
+
+reclas <- reclassify(mosaico, tabla_reclas)
+
+# Se muestra la modificación
+
+print(as.matrix(reclas))
+```
+
+Si se quiere sustituir el valor de una celda, basado en la comparación se pueden usar condiciones. Por ejemplo, si se quiere reemplazar el valor 6 por un 0, se puede implementar el siguiente código:
+
+```{r}
+# Vemos la matriz original antes de modificarla
+
+print(as.matrix(r1))
+```
+
+```{r}
+# Sustitución de valores en celda
+
+r1[r1==6] <- 0
+
+print(as.matrix(r1))
+```
+
+De manera análoga a la tabla de sustituciones para intervalos, la función ***subs()*** permite establecer los valores a ser sustituidos y sus reemplazos, se hace de la siguiente manera:
+
+```{r}
+# Tabla de reclasificación por valores
+
+tab_subs <- data.frame(id=c(0,1,2,3,4),v=c(0,100,200,300,400))
+
+# Se muestra la tabla de reemplazos
+
+print(tab_subs)
+```
+
+```{r}
+# Se muestra la tabla original sin la sustitución
+
+print(as.matrix(r1))
+```
 
 
+```{r}
+# Se aplica la sustitución
+
+sub <- subs(r1, tab_subs)
+
+# Se muestra la sustitución
+
+print(as.matrix(sub))
+```
+
+**Observación:** Si hay un valor en la tabla sin sustitución, se reemplaza por *NA*.
 
 
+## Agregación espacial
+
+El agrupamiento de celdas es de utilidad en muchos casos, cuando una imagen posee muchos pixeles esta es de gran resolución, pero su procesamiento es costoso computacionalmente. Por ello, la función ***agregate()*** permite agrupar varios pixeles, obteniendo un *raster* de menor resolución. El parámetro *fact* establece la cantidad de celdas que se reagrupan para formar una sola celda en el *raster* procesado. Por su parte el parámetro *fun* controla el cálculo de la celda de menor resolución, siendo este por ejemplo: la media, mediana, moda, suma, diferencia, entre otras. En los siguientes ejemplos, el primero se agrupan 2x2 celdas siendo el criterio de agrupación la media y en el segundo ejemplo se agregan 3x3 bajo el criterio de la mediana.
 
 
+```{r}
+# Agregación espacial en 2x2 tomando la media
+
+agreg <- aggregate(mosaico, fact=2, fun="mean")
+
+print(as.matrix(mosaico));print(as.matrix(agreg))
+```
+
+```{r}
+# Agregación espacial en 3x3 tomando la mediana
+
+agreg2 <- aggregate(mosaico, fact=3, fun="median",na.rm = TRUE)
+
+print(as.matrix(mosaico)); print(as.matrix(agreg2))
+```
+
+## Remuestreo
+
+Se pueden aplicar métodos de remuestreo en el paquete *raster*, algunos de los más empleados en el procesamiento de imágenes y percepción remota.
+
+```{r}
+# Imagen de mismo tamaño que mosaico con menos filas
+
+## Se crea el raster
+
+m4 <- matrix(rep(1,20),ncol=4,nrow=5)
+
+# Se convierte a tipo raster
+
+r4 <- raster(m4)
+
+## Se convierte en un obejto espacial tipo extent
+
+extent(r4) <- extent(mosaico)
+
+# Se aplican dos métodos de remuestreo
+
+resv <- resample(mosaico,r4,method="ngb") # vecino más cercano
+
+resb <- resample(mosaico,r4,method="bilinear") # bilinear
+
+# Se observan los objetos remuestreados
+
+print(as.matrix(resv)); print(as.matrix(resb))
+```
+
+## Operaciones focales
+
+Otra operación muy especial que permite realizar le paquete *raster* es el filtrado espacial, también conocido como convolución (kernel). El siguiente ejemplo aplica una operación focal a una ventana móvil de 3x3 pixeles. 
+
+```{r}
+# Se muestra el raster original
+
+print(as.matrix(r1))
+```
 
 
+```{r}
+# Se aplica la función focal en la ventana 2x2 tomando la media
+
+promedio <- focal(r1, w=matrix(1, 3, 3), fun="mean")
+
+# Después de implemendar la operación focal se muestra el resultado
+
+print(as.matrix(promedio))
+```
 
 
+## Operaciones zonales
+
+La estratificación es importante porque permite dividir un mapa de acuerdo a un criterio establecido. Esta división se puede hacer basado en otro mapa. En el siguiente ejemplo, se suma el valor de las celdas del mapa r2 para cada categoría del mapa r1.
+
+```{r}
+# Veamos los mapas originales
+
+print(as.matrix(r1))
+
+print(as.matrix(r2))
+
+```
+
+Notemos que en el primer mapa el valor "0" está en toda la primer fila (cuyos valores en el segundo mapa son 7, 8, 4 y 6); en las dos primeras columnas de las filas 3 y 4 (con valores de 8, 7 y 8, 6) y finalmente en la última fila y columna con el valor de 9. Si sumamos estos valores el resultado es 63. El cual corresponde al resultado del siguiente código:
+
+```{r}
+zonal_sum <- zonal(r2,r1,"sum") # map de valores, mapa de zonas
+
+print(zonal_sum)
+```
+
+El procedimiento descrito anteriormente se puede repetir para los estratos 1, 2, 3 y 4. 
 
 
+## Extracción de los valores de celdas
 
+Para extraer valores de un raster se puede utilizar la función ***getValues()***, la cual permite obtener todos los valores del raster, los de una o un conjunto de filas.
 
+```{r}
+# Veamos el raster r1
 
+print(as.matrix(r1))
+```
 
+```{r}
+# Obtengamos todos los valores del raster
 
+getValues(r1)
+```
 
+```{r}
+# Obtengamos la trecera fila
 
+getValues(r1, row = 3)
+```
 
+De manera similar la función ***getValuesBlock()*** extrae los valores para un bloque de pixeles definidos por números de filas/columnas.
 
+La función extract() sirve como un puente entre datos *raster* y datos vectoriales. Su objetivo principal es "cruzar" ambas capas para saber qué valor tiene el *raster* exactamente en el lugar donde se ubican los elementos vectoriales (puntos, líneas o polígonos). Con algunas opciones adicionales, se puede calcular estadísticos como la media, mediana, moda, entre otros al rededor de un punto (por ejemplo 1km a la redonda) en el *raster*, esto se denomina áreas de influencia (Buffers). 
 
+```{r}
+# Se carga la libreria sf
 
+# library(sf)
+
+# Se carga el mapa de puntos
+
+SFP <- st_read("DatosCap6/SFP.shp")
+```
+
+Para este ejemplo, notemos que dos puntos están contenidos en el raster, mientras que uno no lo está
+
+```{r}
+# Mapas para ver sobrelape
+
+plot(st_geometry(SFP))
+plot(mosaico, add = T)
+plot(st_geometry(SFP), add = TRUE, col = "red", pch = 20)
+```
+
+```{r}
+# Extracción para los 3 puntos
+
+extract(mosaico, SFP)
+```
+
+Claramente como un punto no está contenido en el *raster*, su valor es NA. 
+## Distancias
+
+La última operación básica relacionado a los *raster* que veremos es el cálculo de las distancias mínimas entre pixeles que no seán NA. Si se requiere calcular distancias más complejas, el paquete **gistance** es recomendado. 
+
+```{r}
+# La distancia que exploraremos será la euclidiana
+
+## Definimos el raster
+
+r <- raster(ncol=80,nrow=40)
+projection(r) <- "+proj=utm +zone=15 +ellps=GRS80 +datum=NAD83 +units=m +no_defs"
+
+values(r) <- NA
+
+r[10000] <- 1
+
+r[700] <- 2
+
+plot(r)
+
+```
+
+```{r}
+dist <- distance(r,doEdge = F)
+
+plot(dist)
+```
 
 
 # Capítulo 7. Elaboración de mapas.
