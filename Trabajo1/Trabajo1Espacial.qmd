@@ -7,7 +7,7 @@ format: typst
 ```{r include=FALSE}
 rm(list = ls())
 if(!require(pacman)){install.packages("pacman"); library(pacman)}
-pacman::p_load("sf", "raster", "sp")
+pacman::p_load("sf", "raster", "sp", "RColorBrewer")
 
 options(kableExtra.latex.load_packages = F)
 
@@ -1467,6 +1467,152 @@ plot(dist)
 
 
 # Capítulo 7. Elaboración de mapas.
+
+En R se pueden visualizar y realizar gráficas muy sofisticas. Este capítulo exploraremos cómo guardar gráficas en diversos tamaños, controlando parámetros como tamaño, resolución y color. Usaremos las librerías **sf**, **tmap** y **ggplot2** para crear mapas. Crearemos mapas muy simples que serán coloreados con paletas (algunas muy comunes son: **rainbow()** y **terrain.colors()**), en los mapas se representarán densidades poblacionales y el relieve. Trabajaremos con un conjunto de datos antes visto sobre los estados de México, combinándolos con información demográfica.
+
+
+## Elaboración de archivos de imagen
+
+R permite guardar los archivos que se generen en varios formatos, en particular las imágenes se pueden guardar en formato: *png*, *jpeg*, *bmp*, *postscript*, *tiff* y *pdf*; para cada uno de ellos existe una función de guardado. Un ejemplo de ello es la función ***png()***, que requiere el elemento gráfico a guardarse y la ruta o nombre del archivo de salida, finalizandose el proceso con el comando ***dev.off()***
+
+En el siguiente ejemplo veremos un diagrama de dispersión en el que la función ***text()*** permite colocar texto según las coordenadas del gráfico. Además se explorarán algunas funcionalidades adicionales que controlan el tamaño del texto, la resolución (res) y el color de fondo (bg) de la figura. El control de los márgenes de un gráfico se realiza con la función ***par()*** con el argumento *mar*. Un ejemplo de ello es ***par(mar = c(4.1,4.1,1.1,1.1))*** que establece los márgenes inferior, izquierdo, superior y derecho, respectivamente. Por otro lado, la función ***par()*** con la opción *mfrow=c(nfila,ncol)* permite combinar los dos plots en una fila.
+
+```{r}
+# Con la siguiente instrucción se establece que:
+
+## El archivo png se almacenará en DatosCap7
+
+## El ancho es de 35 y la altura es de 25
+
+## Las unidades del gráfico son centímetros
+
+## Su resolución es de 350
+
+## El fondo del gráfico es color oldlace
+
+png(filename="DatosCap7/salida.png",width=35,height=25,
+    units="cm",res=350,bg="oldlace")
+
+## Las margenes son: inferior 4.8, superior 4.5, izquierdo 2.1 y derecho de 2.7
+
+par(mar=c(4.8,4.5,2.1,2.7))
+
+## Se almacenarán 2 graficos en: una fila y dos columnas
+
+par(mfrow=c(1,2))
+
+# Se genera el gráfico de dispersión con números aleatorios
+
+set.seed(12345)
+
+x <- rpois(5, 4.5)
+
+y <- rpois(5, 8)
+
+z <- rpois(5, 12)
+
+plot(x,y)
+
+# Se pone texto en las coordenadas (6.5, 8)
+
+text(6.5,8,"texto 1")
+
+# Se realiza el segundo gráfico
+
+plot(x,z)
+
+# Se pone texto en las coordenadas (5, 10)
+
+text(5, 10, "texto 2")
+
+# Se finaliza el gráfico
+
+dev.off()
+```
+
+## Manejo del color
+
+Como se introdujo a este capítulo, en R existen muchas maneras de crear y utilizar colores para colorear gráficos y especial mapas, que estudiaremos. Se puede también visitar este enlace https://r-charts.com/es/colores/, en el cual existe una gran variedad de colores discretos o continuos. En R están implementadas varias paletas de colores y escalas de grises, por ejemplo, la función  ***terrain.colors()*** tiene incorporada una gama de colores en formato vector, tiene los argumentos *n* para el número de colores y *alpha* para controlar la transparencia. Veamos un ejemplo en R:
+
+```{r}
+# Crea una escala de 10 colores con terrain
+
+colores <- terrain.colors(10, alpha = 0.5)
+
+colores2 <- terrain.colors(10, alpha = 1) # con transparencia
+
+# Con esta instrucción vemos los códigos de los colores
+
+print(colores)
+```
+
+```{r}
+# Observemos la paleta de colores generada con terrain
+
+par(mfrow=c(1,2))
+pie(rep(1, 10), col = colores)
+pie(rep(1, 10), col = colores2)
+```
+
+Estos son los resultados obtenidos con la función o la gamma de colores ***terrain.colors()***. Pero no solo existen estos, sino que también hay otras paletas predeterminadas como:
+
+- ***gray.colors():*** tonos de grises
+
+- ***heat.colors():*** colores cálidos,
+
+- ***rainbow():*** colores del arcoíris,
+
+- ***terrain.colors():*** tonos de colores adecuados para datos de elevación,
+
+- ***topo.colors():*** tonos continuos en degradado del morado al amarillo,
+
+- ***cm.colors():*** tonos claros continuos en degradado de azul a morado
+
+Las paletas que discutimos anteriormente, están preestablecidas y el usuario le puede modificar su transparencia. Para crear paletas de colores personalizadas, se puede usar el paquete **RColorBrewer**. Allí la función ***brewer.pal()*** permite crear tres tipos de paletas (secuenciales, divergentes y cualitativas) caracterizadas de la siguiente manera: 
+
+- Las paletas secuenciales son adecuadas para datos ordenados que progresan de bajo a alto, con colores claros para valores bajos y oscuros para valores altos
+
+- Las paletas divergentes combinan dos escalas de colores. Se usan cuando hay datos ordenados con un “centro” definido. Por ejemplo, tasas que pueden ser positivas, negativas o cercanas a cero.
+
+- Las paletas cualitativas no indican diferencias de magnitud entre las categorías de la leyenda y los tonos se utilizan para crear diferencias visuales entre las clases. Los esquemas cualitativos son más adecuados para representar datos nominales o categóricos.
+
+Veamos ejemplos en R:
+
+```{r}
+# Se carga la libreria RColorBrewer
+
+# library(RColorBrewer)
+
+# Se crean paletas de colores de los tres tipo, 
+# cada uno con 7 colores
+
+secuencial <- brewer.pal(7,"Greens")
+
+divergente <- brewer.pal(7,"BrBG")
+
+cualitativa <- brewer.pal(7,"Accent")
+
+# Elabora gráfico de pie con las 3 paletas
+
+par(mfrow=c(1,3))
+pie(rep(1, 7), col = secuencial, main="Secuencial")
+pie(rep(1, 7), col = divergente, main="Divergente")
+pie(rep(1, 7), col = cualitativa, main="Cualitativa")
+```
+
+
+## Representación de una variable continua
+
+
+
+
+
+
+
+
+
+
+
 
 
 
