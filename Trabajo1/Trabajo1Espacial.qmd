@@ -1603,9 +1603,35 @@ pie(rep(1, 7), col = cualitativa, main="Cualitativa")
 
 ## Representación de una variable continua
 
+De manera análoga a la manera en que se elegían colores para las variables discretas o categóricas, existen paletas de colores para las variables continuas, algunos ejemplos son los tonos grises o un color en un rango de valores. También existen propuestas para establecer los rangos:
+
+- Intervalos iguales (equal interval)
+
+- Cuantiles (quantile)
+
+- Desviación estándar (sd)
+
+- Roturas naturales (natural breaks o Jenks)
+
+- Roturas bonitas (pretty breaks)
+
+Dependiendo de los datos, una paleta de colores pueden cambiar; porque el cálculo de la desviación estándar cambia o las roturas naturales cambian. Vamos a ver un ejemplo de la densidad poblacional en los estados de la República mexicana. Veremos que la densidad mínima es 8.6 y la máxima es 5954.4 habitantes por km2 en la capital (Ciudad de México). Sin embargo, interpretar este resultado sin observar las demás densidades poblacionales puede ser engañoso, en el siguiente histograma veremos que todas las densidades poblacionales excepto la de la Ciudad de México se encuentran entre 8 y 700. De este modo, si quisiéramos usar una escala de grises para representar la densidad poblacional tomando rangos igualmente espaciados, como: 0 a 1000, 2000, 3000, hasta 6000, obtendríamos un gráfico binario (un color claro para la Ciudad de México y oscuro para los demás estados). Esto esto debido a que las densidades poblacionales en su mayoría son inferiores a 1000. En cambio, si aplicamos el método de los cuantiles, cada tono de gris representará aproximadamente el mismo número de estados, pero si variaría el ancho de los rangos. 
 
 
 
+
+
+
+
+
+
+
+
+
+
+```{r}
+
+```
 
 
 
