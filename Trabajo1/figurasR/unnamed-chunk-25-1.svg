@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="396pt" height="252pt" viewBox="0 0 396 252">
+<defs>
+<clipPath id="clip-0">
+<path clip-rule="nonzero" d="M 59.039062 59.039062 L 365.757812 59.039062 L 365.757812 178.558594 L 59.039062 178.558594 Z M 59.039062 59.039062 "/>
+</clipPath>
+</defs>
+<rect x="-39.6" y="-25.2" width="475.2" height="302.4" fill="rgb(100%, 100%, 100%)" fill-opacity="1"/>
+<g clip-path="url(#clip-0)">
+<path fill-rule="nonzero" fill="rgb(100%, 100%, 100%)" fill-opacity="1" stroke-width="0.75" stroke-linecap="round" stroke-linejoin="round" stroke="rgb(100%, 100%, 100%)" stroke-opacity="1" stroke-miterlimit="10" d="M 59.039062 178.558594 L 365.757812 178.558594 L 365.757812 59.039062 L 59.039062 59.039062 Z M 59.039062 178.558594 "/>
+</g>
+<path fill="none" stroke-width="0.75" stroke-linecap="round" stroke-linejoin="round" stroke="rgb(0%, 0%, 0%)" stroke-opacity="1" stroke-miterlimit="10" d="M 189.101562 156.660156 L 200.75 150.835938 L 264.820312 156.660156 L 264.820312 63.464844 L 159.980469 63.464844 L 159.980469 133.363281 L 165.804688 156.660156 L 159.980469 162.484375 L 194.925781 174.132812 L 177.453125 145.011719 Z M 189.101562 156.660156 "/>
+<path fill="none" stroke-width="0.75" stroke-linecap="round" stroke-linejoin="round" stroke="rgb(0%, 0%, 0%)" stroke-opacity="1" stroke-miterlimit="10" d="M 189.101562 139.1875 L 200.75 127.535156 L 189.101562 115.886719 L 171.628906 115.886719 L 159.980469 127.535156 L 171.628906 139.1875 Z M 189.101562 139.1875 "/>
+<path fill="none" stroke-width="0.75" stroke-linecap="round" stroke-linejoin="round" stroke="rgb(0%, 0%, 0%)" stroke-opacity="1" stroke-miterlimit="10" d="M 212.398438 150.835938 L 253.171875 150.835938 L 253.171875 121.710938 L 224.050781 127.535156 L 224.050781 110.0625 L 212.398438 98.414062 L 194.925781 115.886719 Z M 206.574219 127.535156 L 212.398438 121.710938 L 206.574219 115.886719 L 200.75 121.710938 Z M 218.222656 145.011719 L 229.875 145.011719 L 224.050781 139.1875 L 229.875 133.363281 L 218.222656 133.363281 Z M 218.222656 145.011719 "/>
+<path fill="none" stroke-width="0.75" stroke-linecap="round" stroke-linejoin="round" stroke="rgb(0%, 0%, 0%)" stroke-opacity="1" stroke-miterlimit="10" d="M 206.574219 127.535156 L 200.75 121.710938 L 206.574219 115.886719 L 212.398438 121.710938 Z M 206.574219 127.535156 "/>
+<path fill="none" stroke-width="0.75" stroke-linecap="round" stroke-linejoin="round" stroke="rgb(0%, 0%, 0%)" stroke-opacity="1" stroke-miterlimit="10" d="M 218.222656 145.011719 L 218.222656 133.363281 L 229.875 133.363281 L 224.050781 139.1875 L 229.875 145.011719 Z M 218.222656 145.011719 "/>
+<path fill-rule="evenodd" fill="rgb(0%, 0%, 54.509804%)" fill-opacity="1" stroke-width="0.75" stroke-linecap="round" stroke-linejoin="round" stroke="rgb(0%, 0%, 0%)" stroke-opacity="1" stroke-miterlimit="10" d="M 206.574219 127.535156 L 200.75 121.710938 L 206.574219 115.886719 L 212.398438 121.710938 Z M 206.574219 127.535156 "/>
+<path fill-rule="evenodd" fill="rgb(0%, 0%, 54.509804%)" fill-opacity="1" stroke-width="0.75" stroke-linecap="round" stroke-linejoin="round" stroke="rgb(0%, 0%, 0%)" stroke-opacity="1" stroke-miterlimit="10" d="M 218.222656 145.011719 L 218.222656 133.363281 L 229.875 133.363281 L 224.050781 139.1875 L 229.875 145.011719 Z M 218.222656 145.011719 "/>
+</svg>

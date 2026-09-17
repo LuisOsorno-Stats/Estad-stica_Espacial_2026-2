@@ -1,18 +1,31 @@
 ---
-title: "Título del Documento"
-author: "Tu Nombre"
-format: typst
+title: "Trabajo 1 de estadística espacial"
+description: "Análisis espacial con R"
+date: today
+author:
+  - name: "Nombre: Luis Gabriel Osorno Muñoz, CC: 1032456789"
+    affiliation: "Universidad Nacional de Colombia - Sede Medellín, Facultad de Ciencias"
+format:
+  typst:
+    mainfont: "Liberation Sans"
+    include-before: |
+      #show heading.where(level: 1): it => {
+        pagebreak()
+        it
+      }
+editor: visual
 ---
 
 ```{r include=FALSE}
 rm(list = ls())
 if(!require(pacman)){install.packages("pacman"); library(pacman)}
-pacman::p_load("sf", "raster", "sp", "RColorBrewer")
+pacman::p_load("sf", "raster", "sp", "RColorBrewer", "classInt",
+               "ggspatial", "tmap", "ggplot2")
 
 options(kableExtra.latex.load_packages = F)
 
 knitr::opts_chunk$set(fig.path = 'figurasR/',
-                      echo = FALSE, warning = FALSE, message = FALSE,
+                      echo = TRUE, warning = FALSE, message = FALSE,
                       comment = NA,
                       fig.align="center",
                       cache=FALSE, webshot = "webshot") # 
@@ -20,33 +33,23 @@ knitr::opts_chunk$set(fig.path = 'figurasR/',
 knitr::write_bib(c(.packages(),"knitr","rmarkdown"),file="bib/paquetes.bib", width = 60)
 ```
 
-
-
-
 # Introducción
 
-
-El presente informe en Quarto reúne la aplicación práctica de los fundamentos del análisis espacial mediante el software R. El objetivo central consiste en adquirir fluidez computacional en el manejo de datos georreferenciados mediante la exploración interactiva y personalizada de comandos.
-
-Para validar la compresión del material de estudio, se han sustituido los ejemplos predeterminados del libro guía por un conjunto propio de entidades geométricas (puntos, líneas y polígonos). A través de esta experimentación, se abarcan desde las operaciones lógicas y topológicas básicas en modelos vector y ráster hasta la composición final de mapas detallados, demostrando la capacidad práctica para procesar y presentar información cartográfica de forma autónoma.
-
-
+El presente informe en Quarto reúne la aplicación práctica de los fundamentos del análisis espacial mediante el software R. El objetivo central consiste en adquirir fluidez computacional en el manejo de objetos y datos espaciales. Para verificar que se comprenden los conceptos, se han modificado los ejemplos predeterminados del libro guía por datos propios de entidades geométricas (puntos, líneas y polígonos). A través de esta experimentación, se abarcan desde las operaciones lógicas básicas en modelos vector y ráster hasta la composición final de mapas
 
 # Capítulo 3. Organización de los objetos espaciales en R.
 
 Se estudiará la forma en que están estructurados los datos espaciales en R. Explorando los paquetes **sf** y **raster**.
 
+## Datos vectoriales: modelo simple feature
 
-##  Datos vectoriales: modelo simple feature
+El paquete **sf** es compatible con los tipos *simple feature*, es decir, con la mayoría de operaciones espaciales necesarias como: puntos, líneas, polígonos y versiones múltiples. El paquete **sf** incorpora tres funcionalidades muy importantes: *sp* para el sistema de clases de objetos espaciales, *rgdal* para leer y escribir datos y *rgeos* para operaciones espaciales.
 
-El paquete **sf** es compatible con los tipos *simple feature*, es decir, con la mayoría de operaciones espaciales necesarias como: puntos, líneas, polígonos y versiones múltiples. El paquete **sf** incorpora tres funcionalidades muy importantes: *sp* para el sistema de clases de objetos espaciales, *rgdal* para leer y escribir datos y *rgeos* para operaciones espaciales. 
-
-Los obejtos *simple feature* se almacenan en un dataframe, ocupando una columna especial con el nombre de *geom* o *geometry*. **sf** tiene muchas clases de objetos como: *Point*, *Multipoint*, *Linestring*, *Polygon* entre otras. 
-
+Los obejtos *simple feature* se almacenan en un dataframe, ocupando una columna especial con el nombre de *geom* o *geometry*. **sf** tiene muchas clases de objetos como: *Point*, *Multipoint*, *Linestring*, *Polygon* entre otras.
 
 ## Cobertura de puntos
 
-**sf** permite manejar datos en dos, tres o cuatro dimensiones. Las coordenadas se manejan en forma vectorial o de tabla, luego se transforman en una cobertura de puntos de la clase *sfg:* simple feature geometry con la función ***st_point()*** para un punto o ***st_multipoint()*** para múltiples puntos. 
+**sf** permite manejar datos en dos, tres o cuatro dimensiones. Las coordenadas se manejan en forma vectorial o de tabla, luego se transforman en una cobertura de puntos de la clase *sfg:* simple feature geometry con la función ***st_point()*** para un punto o ***st_multipoint()*** para múltiples puntos.
 
 El ejemplo de la función ***st_point()*** lo vemos en el siguiente script:
 
@@ -70,7 +73,6 @@ str(Pt)
 
 plot(Pt, axes = TRUE)
 ```
-
 
 Por su parte, el ejemplo de la función ***st_multipoint()*** lo vemos en el siguiente script:
 
@@ -114,8 +116,7 @@ MPt <- st_multipoint(xyz)
 print(MPt)
 ```
 
-Se pueden juntar los objetos en colecciones *sfc* con la funcion ***st_sfc()***. Por ejemplo, geometria1 es un objeto de la clase *simple feature collection (sfc)* que une puntos. Es posible determinar el sistema de coordenadas de los datos con la opción *crs*. El sistema de coordenadas puede ser descrito por el código numérico *EPSG* o bien por el sistema de *Proj4string*. 
-
+Se pueden juntar los objetos en colecciones *sfc* con la funcion ***st_sfc()***. Por ejemplo, geometria1 es un objeto de la clase *simple feature collection (sfc)* que une puntos. Es posible determinar el sistema de coordenadas de los datos con la opción *crs*. El sistema de coordenadas puede ser descrito por el código numérico *EPSG* o bien por el sistema de *Proj4string*.
 
 ```{r}
 # Se crean objetos de tipo sfg
@@ -134,7 +135,7 @@ print(geometria1)
 
 ```
 
-Las geometrías *sfc* que se crearon solo tienen información de las coordenadas, no tienen atributos. La idea es crear una tabla de atributos con información sobre cada uno de los puntos, dicha tabla permitirá crear un objeto más sofisticado que la clase *simple feature*. 
+Las geometrías *sfc* que se crearon solo tienen información de las coordenadas, no tienen atributos. La idea es crear una tabla de atributos con información sobre cada uno de los puntos, dicha tabla permitirá crear un objeto más sofisticado que la clase *simple feature*.
 
 ```{r}
 # Creación de un dataframe asociadno una geometría sfc
@@ -155,7 +156,7 @@ print(tabpuntos)
 SFPt <- st_sf(tabpuntos, geometry = geometria1)
 ```
 
-Existen diferentes formas de explorar la tabla creada, por ejemplo, ***class()*** nos indica la naturaleza del objeto (es una mezcla de un dataframe y un objeto espacial); ***print()*** nos permite observar la tabla de atributos o variables que tiene. 
+Existen diferentes formas de explorar la tabla creada, por ejemplo, ***class()*** nos indica la naturaleza del objeto (es una mezcla de un dataframe y un objeto espacial); ***print()*** nos permite observar la tabla de atributos o variables que tiene.
 
 ```{r}
 # Función class()
@@ -167,7 +168,7 @@ class(SFPt)
 print(SFPt)
 ```
 
-Finalmente la función ***plot()*** permite visualizar un mapa que se crea para cada atributo de la tabla. 
+Finalmente la función ***plot()*** permite visualizar un mapa que se crea para cada atributo de la tabla.
 
 ```{r}
 # Función plot()
@@ -181,7 +182,7 @@ Para visualizar la geometría del objeto, en este caso la ubicación de los punt
 plot(st_geometry(SFPt),axes=TRUE)
 ```
 
-Así mismo como se crearon objetos espaciales con la librería **sf**, con la función ***as.data.frame()*** se pueden llevar los objetos espaciales a una tabla de atributos (perdiendo información espacial). Si se quiere filtrar la base de datos o hacer query, de manera simple. Por ejemplo, ***Pozos <- SFPt[nombre=="Pozo",]*** crea un objeto sf con aquellos puntos en el cual el nombre es "Pozo"
+Así mismo como se crearon objetos espaciales con la librería **sf**, con la función ***as.data.frame()*** se pueden llevar los objetos espaciales a una tabla de atributos (perdiendo información espacial). Si se quiere filtrar la base de datos o hacer query, de manera simple. Por ejemplo, ***Pozos \<- SFPt\[nombre=="Pozo",\]*** crea un objeto sf con aquellos puntos en el cual el nombre es "Pozo"
 
 ```{r}
 # Se puede extraer la tabla de atributos de un objeto SFC con
@@ -191,10 +192,9 @@ as.data.frame(SFPt)
 Pozos <- SFPt[nombre=="Pozo",]
 ```
 
-
 ## Cobertura de líneas
 
-Como en matemáticas, una línea simple (o segmento de línea) está definida por las coordenadas de los vértices o dos puntos. Para el manejo de este tipo de líneas simples, *sf* maneja los objetos *Linestring*. Son segmentos libres que no presentan intersecciones ni bifurcaciones. Por su parte, el objeto *Multilinestring* agrupan segmentos *Linestring*. Para mostrar esto el siguiente código muestra cómo se crean tres objetos *Linestring* (L1, L2, L3 y L4). 
+Como en matemáticas, una línea simple (o segmento de línea) está definida por las coordenadas de los vértices o dos puntos. Para el manejo de este tipo de líneas simples, *sf* maneja los objetos *Linestring*. Son segmentos libres que no presentan intersecciones ni bifurcaciones. Por su parte, el objeto *Multilinestring* agrupan segmentos *Linestring*. Para mostrar esto el siguiente código muestra cómo se crean tres objetos *Linestring* (L1, L2, L3 y L4).
 
 ```{r}
 # Se crean los tres objetos "Linestring"
@@ -243,7 +243,7 @@ L1L2 <- st_multilinestring(list(L1,L2))
 geometria2 <- st_sfc(L1,L2,L3,L4)
 ```
 
-De manera análoga a lo que se realizó en la cobertura de puntos, podemos crear un dataframe o tabla de atributos a las líneas. 
+De manera análoga a lo que se realizó en la cobertura de puntos, podemos crear un dataframe o tabla de atributos a las líneas.
 
 ```{r}
 # Creación del dataframe
@@ -290,7 +290,6 @@ plot(st_geometry(SFL[tipo=="Terraceria",]),col="red",axes=TRUE)
 plot(st_geometry(SFL[tipo=="Pavimentada",]),add=TRUE)
 
 ```
-
 
 ## Cobertura de polígonos
 
@@ -359,7 +358,6 @@ P4 = st_polygon(list(c4i))
 plot(P3)
 plot(P4)
 ```
-
 
 Otro polígono por ejemplo es:
 
@@ -529,16 +527,13 @@ Con esto se concluye la revisión y reproducción del capitulo 3
 rm(list = ls())
 ```
 
-
 # Capítulo 4. Creación e intercambio de datos espaciales.
 
 La idea de este capítulo es explorar los formatos raster y vector, veremos cómo importar y exportar archivos en dicho formato.
 
-
 ## Creación de una cobertura de puntos
 
-Encontrar datos espaciales en formato de texto es algo que ocurre comúnmente, los cuales corresponden a descripciones o coordenadas de puntos de interés. Un caso simple, corresponde a las observaciones de fauna y flora. La idea del siguiente ejemplo es crear una cobertura de puntos para la ocurrencia del puma (Puma concolor). Los datos fueron obtenidos del portal Global Biodiversity Information Facility (GBIF, https://www.gbif.org) para México (periodo 2000-2021) en formato “.csv”. 
-
+Encontrar datos espaciales en formato de texto es algo que ocurre comúnmente, los cuales corresponden a descripciones o coordenadas de puntos de interés. Un caso simple, corresponde a las observaciones de fauna y flora. La idea del siguiente ejemplo es crear una cobertura de puntos para la ocurrencia del puma (Puma concolor). Los datos fueron obtenidos del portal Global Biodiversity Information Facility (GBIF, https://www.gbif.org) para México (periodo 2000-2021) en formato “.csv”.
 
 ```{r}
 # Se obtiene el path de una base de datos almacenada en github
@@ -589,8 +584,7 @@ Finalmente, después de pasar las coordenadas geográficas y georeferenciarlas a
 plot(pts_puma)
 ```
 
-El cual corresponde a graficar los puntos en el lienzo y colorearlos de acuerdo a las categorías en cada variable. 
-
+El cual corresponde a graficar los puntos en el lienzo y colorearlos de acuerdo a las categorías en cada variable.
 
 ## Importación de archivos shape
 
@@ -602,7 +596,7 @@ El formato *shapefile* es un tipo de archivo para datos espaciales muy utilizado
 
 - **.dbf:** el cual almacena la tabla de los atributos de los objetos
 
-Es recomendable trabajar con un cuarto archivo **.prj** que almacena el sistema de referencia con el cual se está trabajando. 
+Es recomendable trabajar con un cuarto archivo **.prj** que almacena el sistema de referencia con el cual se está trabajando.
 
 Para trabajar con los archivos *shapefile*, usaremos la librería **sf**, por su facilidad en el momento de trabajar con objetos espaciales, como lo son los puntos, las lineas y los polígonos asociados (o no) a las tablas de atributos o dataframes.
 
@@ -616,7 +610,7 @@ Con el procedimiento anterior podemos leer los archivos *shapefile* usando la fu
 
 ## Importación de archivos vector de otros formatos
 
-Además al formato *shapefile* que se manejó brevemente en la subsección anterior, existen muchos otros formatos alternativos, como el OGC GeoPackage (GPKG).  La función ***st_read()***, que utiliza GDAL, es capaz de importar muchos formatos de datos espaciales. Veamos algunos formatos soportados por la librería **sf**:
+Además al formato *shapefile* que se manejó brevemente en la subsección anterior, existen muchos otros formatos alternativos, como el OGC GeoPackage (GPKG). La función ***st_read()***, que utiliza GDAL, es capaz de importar muchos formatos de datos espaciales. Veamos algunos formatos soportados por la librería **sf**:
 
 ```{r}
 # Los drivers sportados por sf los almacenamos
@@ -657,8 +651,7 @@ st_write(mx,"DatosCap4/mexico.shp", delete_layer = TRUE)
 st_write(mx, dsn = "DatosCap4/mx.gpkg", delete_layer = TRUE)
 ```
 
-Una gran ventaja de usar GeoPackage (.gpkg) en comparación con el archivo shapefile es que permite almacenar 140 TB (en vez de 2 GB en los shapes). Lo cual es una ventaja enorme, además que está formado por un solo archivo y no tres. 
-
+Una gran ventaja de usar GeoPackage (.gpkg) en comparación con el archivo shapefile es que permite almacenar 140 TB (en vez de 2 GB en los shapes). Lo cual es una ventaja enorme, además que está formado por un solo archivo y no tres.
 
 ## Manejo de objetos espaciales en sf
 
@@ -721,8 +714,7 @@ st_crs(carr) <- "+proj=lcc +lat_1=17.5 +lat_2=29.5 +lat_0=12 +lon_0=-102
 +x_0=2500000 +y_0=0 +ellps=GRS80 +units=m +no_defs"
 ```
 
-La función ***st_is_invalid()*** detecta errores de geometría como intersecciones. Lo que hace es evaluar cada fila del dataset retornando TRUE o FALSE. El conjunto de datos mx, cada fila corresponde a un estado mexicano, la función evalúa cada uno y retorna un vector de 32 elementos: 
-
+La función ***st_is_invalid()*** detecta errores de geometría como intersecciones. Lo que hace es evaluar cada fila del dataset retornando TRUE o FALSE. El conjunto de datos mx, cada fila corresponde a un estado mexicano, la función evalúa cada uno y retorna un vector de 32 elementos:
 
 ```{r}
 # Test de la validez de los mapas
@@ -762,10 +754,9 @@ mx_sp <- as(mx, Class = "Spatial")
 mx_sf <- st_as_sf(mx_sp, "sf")
 ```
 
-
 ## Importación / exportación de datos raste
 
-Los objetos raster se pueden manejar usando el paquete **raster**, donde la función ***raster()*** permite la importación de imágenes en muchísimos formatos de imagen en los objetos *RasterLayer*. La escritura de puede hacer con la función ***writeRaster()***, guardandolos en muchos formatos de imagén como  ENVI, ESRI, ERDAS, GeoTiff, GeoJSON, GPKG, IDRISI, SAGA, entre otros. 
+Los objetos raster se pueden manejar usando el paquete **raster**, donde la función ***raster()*** permite la importación de imágenes en muchísimos formatos de imagen en los objetos *RasterLayer*. La escritura de puede hacer con la función ***writeRaster()***, guardandolos en muchos formatos de imagén como ENVI, ESRI, ERDAS, GeoTiff, GeoJSON, GPKG, IDRISI, SAGA, entre otros.
 
 ```{r}
 # Se carga la librería raster
@@ -816,15 +807,13 @@ writeRaster(dem, filename="DatosCap4/DEM_Mx.gpkg", format="GPKG",
 rm(list = ls())
 ```
 
-
 # Capítulo 5. Operaciones básicas de SIG (vector).
-
 
 En este capítulo se explorarán algunas de las operaciones básicas para trabajar con formato vector en el análisis espacial. La idea es trabajar con funciones del paquete **sf**, el cual se ha empleado recurrentemente antes.
 
 ## Datos “minimalistas”
 
-Las figuras geométricas poseen muchas propiedades y medidas. En esta sección trabajaremos con datos minimalistas o de juguete, para explorar las funciones del paquete **sf**. Veremos funciones para verificar la geometría de los objetos, longitud de las líneas, área de polígonos, entre otros. Nuevamente veremos una manera de crear mapas con los objetos espaciales que hemos desarrollado.   
+Las figuras geométricas poseen muchas propiedades y medidas. En esta sección trabajaremos con datos minimalistas o de juguete, para explorar las funciones del paquete **sf**. Veremos funciones para verificar la geometría de los objetos, longitud de las líneas, área de polígonos, entre otros. Nuevamente veremos una manera de crear mapas con los objetos espaciales que hemos desarrollado.
 
 ```{r}
 # Se carga la librería sf
@@ -840,7 +829,6 @@ SFP <- st_read("DatosCap5/SFP.shp")
 
 SFL <- st_read("DatosCap5/SFL.shp")
 ```
-
 
 ```{r}
 # Mapa polígonos
@@ -871,9 +859,7 @@ Cuando se tiene polígonos, podemos calcular su área con la función ***sf_area
 st_area(SFPol)
 ```
 
-
 De manera análoga podemos calcular la longitud de una linea con una función ***st_lenght()***
-
 
 ```{r}
 # Calcula longitud líneas
@@ -900,11 +886,9 @@ text(7.8,6,"3",pos=4,col="red",cex=1)
 
 ```
 
-
 ## Consulta sobre intersecciones
 
 Las intersecciones entre objetos espaciales se puede consultar de varias maneras con el paquete **sf**. La función ***st_intersects()*** permite ver si dos objetos espaciales se interceptan o no. Dicha función tiene una opción llamada *sparce* para configurar la manera en que se muestran los resultados de la función, si se establece como: *sparse = FALSE* los resultados se muestran como una matriz; si se establece como *sparse = TRUE* los resultados aparecen de manera condensada. Existe otra manera de calcular "intersecciones" entre objetos espaciales, es midiendo distancias euclidianas con la función ***st_distance()***. Veamos algunas salidas:
-
 
 ```{r}
 ## Muestra valores TRUE o False
@@ -918,7 +902,6 @@ st_intersects(SFP, SFPol, sparse = FALSE)
 
 st_intersects(SFP, SFPol, sparse = TRUE)
 ```
-
 
 ```{r}
 # Intersección de líneas y polígonos
@@ -939,8 +922,7 @@ st_distance(SFP, SFPol)
 
 ## Intersección geométrica
 
-La última función que veremos es la intersección geométrica entre dos objetos espaciales, para ello emplearemos la función ***st_intersection()*** que combina las geometrías espaciales y los atributos (dataframes) que poseen ambos objetos donde se sobreponen. En el siguiente código veremos cómo calcular la longitud de los segmentos que coinciden espacialmente con
-las diferentes categorías de los polígonos.
+La última función que veremos es la intersección geométrica entre dos objetos espaciales, para ello emplearemos la función ***st_intersection()*** que combina las geometrías espaciales y los atributos (dataframes) que poseen ambos objetos donde se sobreponen. En el siguiente código veremos cómo calcular la longitud de los segmentos que coinciden espacialmente con las diferentes categorías de los polígonos.
 
 ```{r}
 # Operadores geométricos (intersección geométrica)
@@ -984,10 +966,9 @@ print(Suma_l)
 
 ```
 
-
 # Capítulo 6. Operaciones básicas de SIG (raster).
 
-La idea de este capítulo es explorar y tratar los objetos tipo *raster*, comúnmente utilizados en el análisis espacial. Al igual que en el capítulo anterior sobre objetos tipo SIG (vector), la idea es explorar algunas funciones del paquete **raster** que permite trabajar con objetos espaciales. Para ello, igualmente trabajaremos con datos *minimalistas*. Para ilustrar las metodologías, usaremos datos reales del suelo del estado de Michoacán, México. 
+La idea de este capítulo es explorar y tratar los objetos tipo *raster*, comúnmente utilizados en el análisis espacial. Al igual que en el capítulo anterior sobre objetos tipo SIG (vector), la idea es explorar algunas funciones del paquete **raster** que permite trabajar con objetos espaciales. Para ello, igualmente trabajaremos con datos *minimalistas*. Para ilustrar las metodologías, usaremos datos reales del suelo del estado de Michoacán, México.
 
 ## Datos “minimalistas”
 
@@ -1103,7 +1084,6 @@ cellStats(r1,"sum")
 cellStats(r1,"sd")
 ```
 
-
 ## Álgebra de mapa
 
 A los *raster* se les pueden aplicar funciones u operaciones de un SIG. Es decir, podemos sumar dos *raster* entre sí, multiplicar o sumarle constantes a un *raster*, con la función ***overlay()*** se pueden programar funciones personalizadas, entre otras operaciones, aplicandose pixel por pixel. Veamos algunos ejemplos de ello.
@@ -1137,7 +1117,6 @@ sum3 <- overlay(r1, r2, sum1, fun=function(x, y, z){ x + 2*y -z})
 
 print(as.matrix(sum3))
 ```
-
 
 ## Corte y mosaico
 
@@ -1200,7 +1179,7 @@ print(as.matrix(corte))
 
 ## Reclasificación
 
-El proceso de reclasificación o reasignación de valores en las matrices, es muy importante porque modifica valores existentes y los reemplazan; en el manejo de *rasters*, se opera de manera similar. Para el ejemplo a continuación, consideremos el *raster* **r1** que creamos anteriormente; aquellos elementos en el raster que tengan un valor estrictamente menor que 6, se les asignará un valor de 5. 
+El proceso de reclasificación o reasignación de valores en las matrices, es muy importante porque modifica valores existentes y los reemplazan; en el manejo de *rasters*, se opera de manera similar. Para el ejemplo a continuación, consideremos el *raster* **r1** que creamos anteriormente; aquellos elementos en el raster que tengan un valor estrictamente menor que 6, se les asignará un valor de 5.
 
 ```{r}
 # Veamos el raster r1
@@ -1273,7 +1252,6 @@ print(tab_subs)
 print(as.matrix(r1))
 ```
 
-
 ```{r}
 # Se aplica la sustitución
 
@@ -1286,11 +1264,9 @@ print(as.matrix(sub))
 
 **Observación:** Si hay un valor en la tabla sin sustitución, se reemplaza por *NA*.
 
-
 ## Agregación espacial
 
 El agrupamiento de celdas es de utilidad en muchos casos, cuando una imagen posee muchos pixeles esta es de gran resolución, pero su procesamiento es costoso computacionalmente. Por ello, la función ***agregate()*** permite agrupar varios pixeles, obteniendo un *raster* de menor resolución. El parámetro *fact* establece la cantidad de celdas que se reagrupan para formar una sola celda en el *raster* procesado. Por su parte el parámetro *fun* controla el cálculo de la celda de menor resolución, siendo este por ejemplo: la media, mediana, moda, suma, diferencia, entre otras. En los siguientes ejemplos, el primero se agrupan 2x2 celdas siendo el criterio de agrupación la media y en el segundo ejemplo se agregan 3x3 bajo el criterio de la mediana.
-
 
 ```{r}
 # Agregación espacial en 2x2 tomando la media
@@ -1340,14 +1316,13 @@ print(as.matrix(resv)); print(as.matrix(resb))
 
 ## Operaciones focales
 
-Otra operación muy especial que permite realizar le paquete *raster* es el filtrado espacial, también conocido como convolución (kernel). El siguiente ejemplo aplica una operación focal a una ventana móvil de 3x3 pixeles. 
+Otra operación muy especial que permite realizar le paquete *raster* es el filtrado espacial, también conocido como convolución (kernel). El siguiente ejemplo aplica una operación focal a una ventana móvil de 3x3 pixeles.
 
 ```{r}
 # Se muestra el raster original
 
 print(as.matrix(r1))
 ```
-
 
 ```{r}
 # Se aplica la función focal en la ventana 2x2 tomando la media
@@ -1358,7 +1333,6 @@ promedio <- focal(r1, w=matrix(1, 3, 3), fun="mean")
 
 print(as.matrix(promedio))
 ```
-
 
 ## Operaciones zonales
 
@@ -1381,8 +1355,7 @@ zonal_sum <- zonal(r2,r1,"sum") # map de valores, mapa de zonas
 print(zonal_sum)
 ```
 
-El procedimiento descrito anteriormente se puede repetir para los estratos 1, 2, 3 y 4. 
-
+El procedimiento descrito anteriormente se puede repetir para los estratos 1, 2, 3 y 4.
 
 ## Extracción de los valores de celdas
 
@@ -1408,7 +1381,7 @@ getValues(r1, row = 3)
 
 De manera similar la función ***getValuesBlock()*** extrae los valores para un bloque de pixeles definidos por números de filas/columnas.
 
-La función extract() sirve como un puente entre datos *raster* y datos vectoriales. Su objetivo principal es "cruzar" ambas capas para saber qué valor tiene el *raster* exactamente en el lugar donde se ubican los elementos vectoriales (puntos, líneas o polígonos). Con algunas opciones adicionales, se puede calcular estadísticos como la media, mediana, moda, entre otros al rededor de un punto (por ejemplo 1km a la redonda) en el *raster*, esto se denomina áreas de influencia (Buffers). 
+La función extract() sirve como un puente entre datos *raster* y datos vectoriales. Su objetivo principal es "cruzar" ambas capas para saber qué valor tiene el *raster* exactamente en el lugar donde se ubican los elementos vectoriales (puntos, líneas o polígonos). Con algunas opciones adicionales, se puede calcular estadísticos como la media, mediana, moda, entre otros al rededor de un punto (por ejemplo 1km a la redonda) en el *raster*, esto se denomina áreas de influencia (Buffers).
 
 ```{r}
 # Se carga la libreria sf
@@ -1436,10 +1409,9 @@ plot(st_geometry(SFP), add = TRUE, col = "red", pch = 20)
 extract(mosaico, SFP)
 ```
 
-Claramente como un punto no está contenido en el *raster*, su valor es NA. 
-## Distancias
+Claramente como un punto no está contenido en el *raster*, su valor es NA. \## Distancias
 
-La última operación básica relacionado a los *raster* que veremos es el cálculo de las distancias mínimas entre pixeles que no seán NA. Si se requiere calcular distancias más complejas, el paquete **gistance** es recomendado. 
+La última operación básica relacionado a los *raster* que veremos es el cálculo de las distancias mínimas entre pixeles que no seán NA. Si se requiere calcular distancias más complejas, el paquete **gistance** es recomendado.
 
 ```{r}
 # La distancia que exploraremos será la euclidiana
@@ -1465,11 +1437,9 @@ dist <- distance(r,doEdge = F)
 plot(dist)
 ```
 
-
 # Capítulo 7. Elaboración de mapas.
 
 En R se pueden visualizar y realizar gráficas muy sofisticas. Este capítulo exploraremos cómo guardar gráficas en diversos tamaños, controlando parámetros como tamaño, resolución y color. Usaremos las librerías **sf**, **tmap** y **ggplot2** para crear mapas. Crearemos mapas muy simples que serán coloreados con paletas (algunas muy comunes son: **rainbow()** y **terrain.colors()**), en los mapas se representarán densidades poblacionales y el relieve. Trabajaremos con un conjunto de datos antes visto sobre los estados de México, combinándolos con información demográfica.
-
 
 ## Elaboración de archivos de imagen
 
@@ -1532,7 +1502,7 @@ dev.off()
 
 ## Manejo del color
 
-Como se introdujo a este capítulo, en R existen muchas maneras de crear y utilizar colores para colorear gráficos y especial mapas, que estudiaremos. Se puede también visitar este enlace https://r-charts.com/es/colores/, en el cual existe una gran variedad de colores discretos o continuos. En R están implementadas varias paletas de colores y escalas de grises, por ejemplo, la función  ***terrain.colors()*** tiene incorporada una gama de colores en formato vector, tiene los argumentos *n* para el número de colores y *alpha* para controlar la transparencia. Veamos un ejemplo en R:
+Como se introdujo a este capítulo, en R existen muchas maneras de crear y utilizar colores para colorear gráficos y especial mapas, que estudiaremos. Se puede también visitar este enlace https://r-charts.com/es/colores/, en el cual existe una gran variedad de colores discretos o continuos. En R están implementadas varias paletas de colores y escalas de grises, por ejemplo, la función ***terrain.colors()*** tiene incorporada una gama de colores en formato vector, tiene los argumentos *n* para el número de colores y *alpha* para controlar la transparencia. Veamos un ejemplo en R:
 
 ```{r}
 # Crea una escala de 10 colores con terrain
@@ -1568,7 +1538,7 @@ Estos son los resultados obtenidos con la función o la gamma de colores ***terr
 
 - ***cm.colors():*** tonos claros continuos en degradado de azul a morado
 
-Las paletas que discutimos anteriormente, están preestablecidas y el usuario le puede modificar su transparencia. Para crear paletas de colores personalizadas, se puede usar el paquete **RColorBrewer**. Allí la función ***brewer.pal()*** permite crear tres tipos de paletas (secuenciales, divergentes y cualitativas) caracterizadas de la siguiente manera: 
+Las paletas que discutimos anteriormente, están preestablecidas y el usuario le puede modificar su transparencia. Para crear paletas de colores personalizadas, se puede usar el paquete **RColorBrewer**. Allí la función ***brewer.pal()*** permite crear tres tipos de paletas (secuenciales, divergentes y cualitativas) caracterizadas de la siguiente manera:
 
 - Las paletas secuenciales son adecuadas para datos ordenados que progresan de bajo a alto, con colores claros para valores bajos y oscuros para valores altos
 
@@ -1600,7 +1570,6 @@ pie(rep(1, 7), col = divergente, main="Divergente")
 pie(rep(1, 7), col = cualitativa, main="Cualitativa")
 ```
 
-
 ## Representación de una variable continua
 
 De manera análoga a la manera en que se elegían colores para las variables discretas o categóricas, existen paletas de colores para las variables continuas, algunos ejemplos son los tonos grises o un color en un rango de valores. También existen propuestas para establecer los rangos:
@@ -1615,43 +1584,594 @@ De manera análoga a la manera en que se elegían colores para las variables dis
 
 - Roturas bonitas (pretty breaks)
 
-Dependiendo de los datos, una paleta de colores pueden cambiar; porque el cálculo de la desviación estándar cambia o las roturas naturales cambian. Vamos a ver un ejemplo de la densidad poblacional en los estados de la República mexicana. Veremos que la densidad mínima es 8.6 y la máxima es 5954.4 habitantes por km2 en la capital (Ciudad de México). Sin embargo, interpretar este resultado sin observar las demás densidades poblacionales puede ser engañoso, en el siguiente histograma veremos que todas las densidades poblacionales excepto la de la Ciudad de México se encuentran entre 8 y 700. De este modo, si quisiéramos usar una escala de grises para representar la densidad poblacional tomando rangos igualmente espaciados, como: 0 a 1000, 2000, 3000, hasta 6000, obtendríamos un gráfico binario (un color claro para la Ciudad de México y oscuro para los demás estados). Esto esto debido a que las densidades poblacionales en su mayoría son inferiores a 1000. En cambio, si aplicamos el método de los cuantiles, cada tono de gris representará aproximadamente el mismo número de estados, pero si variaría el ancho de los rangos. 
-
-
-
-
-
-
-
-
-
-
-
-
+Dependiendo de los datos, una paleta de colores pueden cambiar; porque cambia el cálculo de la desviación estándar o las roturas naturales cambian. Vamos a ver un ejemplo de la densidad poblacional en los estados de la República mexicana. Veremos que la densidad mínima es 8.6 y la máxima es 5954.4 habitantes por $km^2$ en la capital (Ciudad de México). Sin embargo, interpretar este resultado sin observar las demás densidades poblacionales puede ser engañoso, en el siguiente histograma veremos que todas las densidades poblacionales excepto la de la Ciudad de México se encuentran entre 8 y 700. De este modo, si quisiéramos usar una escala de grises para representar la densidad poblacional tomando rangos igualmente espaciados algo como: 0 a 1000, 2000, 3000, hasta 6000, obtendríamos un gráfico binario (un color claro para la Ciudad de México y oscuro para los demás estados). Esto esto debido a que las densidades poblacionales en su mayoría son inferiores a 1000. En cambio, si aplicamos el método de los cuantiles, cada tono de gris representará aproximadamente el mismo número de estados, pero si variaría el ancho de los rangos.
 
 ```{r}
+# Se carga la libreria sf
+
+# library(sf)
+
+# Cargamos los datos
+
+mx <- st_read("DatosCap7/mx_lcc.gpkg")
+```
+
+```{r}
+# Extraemos la variable densidad poblacional
+
+var <- mx$dens
+
+# Calcula su valor máximo y el mínimo
+
+min(var); max(var)
+```
+
+En los resultados claramente vemos lo que se mencionaba anteriormente, sobre la mínima densidad y la máxima
+
+```{r}
+# Ordenamos las densidades
+
+sort(var)
+```
+
+En el ordenamiento, se refleja que solo hay un único valor superior a 1000 y en su mayoría todos son pequeños en comparación con el máximo.
+
+```{r}
+# Graficamos un histograma
+hist(var, breaks=100, main="",xlab="Densidad de población",
+ylab="Número de estados")
+```
+
+Con el gráfico anterior se ilustra lo que se comentó en un principio.
+
+La función ***classIntervals()*** del paquete **classInt**, permite hacer una asignación de los umbrales para los rangos en que se debe clasificar o segmentar una muestra. Existen muchos métodos para realizar dicha tarea, puesto que no es algo trivial y no se deben elegir rangos arbitrarios. La función genera una tabla que es un objeto *classIntervals*, allí se indican los umbrales de los intervalos el símbolo "\[" indica que el valor está incluido en el intervalo, ")" que está excluido; además la función indica cuantos elementos están en cada intervalo. Veamos un ejemplo:
+
+```{r}
+# Se carga la libreria
+
+# library(classInt)
+
+# Implementamos la partición igual
+
+classIntervals(var, n = 6, style = "equal")
+```
+
+Recordemos que la partición igual es la más mala de todas, notemos lo desbalanceadas que quedaron las frecuencias.
+
+```{r}
+# Implementamos la partición quantilica
+
+intervalos <- classIntervals(var, n = 6, style = "quantile")
+
+print(intervalos)
 
 ```
 
+Por el contrario, notemos la partición quantílica, allí las frecuencias en cada uno de los rangos son más uniformes, pero la longitud de los rangos es bastante desigual.
 
+```{r}
+# Podemos ver los umbrales
 
+umbrales <- intervalos$brks
 
+print(umbrales)
+```
 
+El número de umbrales es siete, puesto que para obtener seis rangos o intervalos se requieren siete puntos. Con dichos umbrales, podemos generar una paleta de colores, puede ser una escala de grises (gray.colors). La función ***findInterval()*** permite asociar a cada valor o elemento de la variable densidad con su respectivo código de color, así generamos un vector que indica el código de color que le toca a cada estado.
 
+```{r}
+# Creamos la paleta de grises 
 
+tonos <- gray.colors(6)
 
+print(tonos)
+```
 
+```{r}
+# Buscamos los indices basados en el umbral
 
+num_intervalo <- findInterval(var, umbrales,all.inside=TRUE)
 
+print(num_intervalo)
+```
 
+```{r}
+# Finalmenet, asociamos los colores con el número del intervalo
 
+codigos_color <- tonos[num_intervalo]
 
+head(codigos_color)
+```
 
+La función ***cut()*** permite obtener resultados similares.
 
+## Elaboración de un mapa con sf y sp
 
+De las manera más simples para graficar un mapa es usando la función ***plot()*** de la librería **sf**. Es un mapa relativamente simple, donde se le indica a la función cuál es la variable que se desea graficar y el método de reclasificación (igual o quantiles por ejemplo). Veamoslo a continuación:
 
+```{r}
+# Mapa simple
 
+plot(mx["dens"], breaks = "quantile")
+```
 
+El mapa se colorea por defecto, pero podemos agregar una escala de colores, que para este ejemplo usaremos un verde.
 
+```{r}
+# Se carga la librería RColorBrewer
+  
+# library(RColorBrewer)
 
+# Generación de 7 colores en la escala verde a blanco
 
+colores <- brewer.pal(7, "Greens")
+
+plot(mx["dens"], breaks = "quantile", nbreaks = 7, pal = colores)
+```
+
+El mapa anterior brinda poca información al respecto. El siguiente mapa posee una leyenda, la cual indica la densidad poblacional de acuerdo al color. Para segmentar los colores, usaremos el método de los cuantiles con la función ***classIntervals()***.
+
+```{r}
+# El primer paso que vino es crear la paleta de colores
+
+## Definiremos 7 colores o categorías 
+
+numclass <- 7 
+
+colores <- brewer.pal(numclass, "Greens")
+
+# Basado en el método del cuantil, determinaremos los umbrales
+
+var <- mx$dens
+
+brks<-classIntervals(var, n=numclass, style="quantile")
+
+brks <- brks$brks
+
+print(brks)
+```
+
+```{r}
+# Realizaremos el match entre el color y su densidad
+
+codigos_num <- findInterval(var, brks,all.inside=TRUE)
+
+print(codigos_num)
+```
+
+```{r}
+# Luego el match entre los colores y el código numérico
+
+codigos_color <- colores[codigos_num]
+
+print(codigos_color)
+```
+
+```{r}
+# Se carga la librería sf
+
+# library(sf)
+
+# Se definen las margenes
+
+par(mar=c(4.1,4.1,4.1,1.1))
+
+# Se establece la imagen de salida, con propiedades como:
+# tamaño, resolución, formato, unidades, entre otras
+
+png(file="DatosCap7/mexico_densidad.png", height=16,
+width=20, units="cm", res=300)
+
+# Se dibuja el mapa, y se colorea de acuerdo a los establecidos
+
+plot(mx["dens"], col=codigos_color, axes=T, main="")
+
+# Se agrega el titulo
+
+title(main="Densidad poblacional", cex.main=1.3)
+
+# Se agrega la leyenda basado en los rangos establecidos
+
+rangos <- levels(cut(mx$dens, breaks = round(brks, 0), include.lowest = TRUE))
+
+rangos[1] <- paste("Menos de", round(brks[2], 0))
+
+rangos[length(rangos)] <- paste("Más de", round(brks[length(brks)-1], 0))
+
+legend("topright", inset=0.01, title=expression("Densidad (hb/km"^2*")") , legend=rangos, fill=colores, horiz=FALSE, 
+       box.col = NA, cex = 1.1)
+
+dev.off()
+```
+
+El segundo gráfico que se elaborará, será en base a un archivo *raster* y utilizará paletas de colores predeterminadas.
+
+```{r}
+# Se importa la librería raster
+
+# library(raster)
+
+# Se define el tamaño del gráfico
+
+extension <- extent(2000000,3000000,500000,1500000)
+
+dem <- crop(raster("DatosCap7/DEM_Mx.tif"), extension)
+
+# Creamos una escala de 7 colores
+
+colores <- terrain.colors(7, alpha = 1)
+
+# Se realiza el mapa
+
+## Primero se establen los elementos de guardado
+
+png(file="DatosCap7/dem-mx.png", height=20, width=20, 
+    units="cm", res=400)
+
+## Se grafica el raster
+
+plot(dem, col=colores, 
+     breaks=c(0, 500, 1000, 1500, 2000, 2500, 3000, 5300),
+     main = "Elevación")
+
+# Se agregan aesthetics al gráfico
+
+SpatialPolygonsRescale(layout.scale.bar(), offset= c(2100000,600000),
+                       scale= 300000, fill=c("transparent", "black"),
+                       plot.grid= F)
+
+text(2100000,580000,"0")
+
+text(2430000,580000,"300 km")
+
+dev.off()
+```
+
+El último ejemplo consiste en una figura de sombreado con base en el modelo digital de elevación.
+
+```{r}
+# Preparación de un sombreado
+
+## Se establece la pendiente de elevación del raster
+
+pend <- terrain(dem, opt = "slope")
+
+## Se establece la orientación del raster
+
+orient <- terrain(dem, opt = "aspect")
+
+## Se calcula el sombreado basado en las capas de pendiente y 
+## Orientación
+
+sombra <- hillShade(pend, orient, 40, 270)
+
+# Plotea el sombreado y la elevación con transparencia
+
+## Se establecen los elementos de guardado
+
+png(file="DatosCap7/sombreado-mx.png", height=20, width=20, 
+    units="cm", res=400)
+
+## Se grafica el raster, bajo escala de grises como la primera capa
+
+plot(sombra, col = grey(0:100/100), legend = FALSE, main = "Sombreado")
+
+## Se agrega el relieve del raster
+
+plot(dem, col = rainbow(25, alpha = 0.3), add = TRUE)
+
+## Se continua agregando algunos aspectos del aesthetic
+
+SpatialPolygonsRescale(layout.scale.bar(), offset= c(2100000,600000), 
+                       scale= 300000, fill=c("transparent", "black"),
+                       plot.grid= F)
+
+text(2100000,580000,"0")
+
+text(2430000,580000,"300 km")
+
+dev.off()
+```
+
+## Elaboración de un mapa con ggplot2
+
+El paquete **gplot2** es ampliamente utilizado para realizar gráficos estadísticos, el paquete permite modificar una gran cantidad de características o aspectos del gráfico con alto nivel de minuciosidad. De este modo y en línea con que se ha expuesto, veremos cómo usar el paquete **ggplot2** para realizar mapas a partir de la superposición de capas. La idea es trabajar con los mismos datos sobre México, una de las ideas principales es poder comparar las diferentes librerías y sus funciones.
+
+```{r}
+# Cargamos las librerias ggplot2 y ggspatial
+
+# library(ggplot2)
+# library(ggspatial)
+
+# Graficamos el mapa 
+
+ggplot(data = mx) +
+geom_sf()
+
+```
+
+La idea de la función ***geom_sf()*** es agregar una geometría que está en un objeto *sf*. La manera de agregar capas en *ggplot* es con el signo "+", que indica la continuación de capas. Para crear un gráfico con ggplot, primero se llama la función ***ggplot()*** y posteriormente se anexan las capas que se requieran o quieran, de este modo el orden es muy importante porque el gráfico final será una composición de elementos. *ggpplot* posee la funcionalidad de agregar elementos como el título y subtitulo con la función ***ggtitle()***, los nombres de los ejes con ***xlab()*** y ***ylab()***. Por ejemplo:
+
+```{r}
+ggplot(data = mx) +
+  geom_sf() +
+  xlab("Longitud") + ylab("Latitud") + # Agrega etiquetas a los ejes
+  ggtitle("República mexicana") + # Título principal
+  theme(plot.title = element_text(hjust = 0.5)) # Centra el título
+```
+
+Los gráficos se pueden colorear:
+
+```{r}
+# Agregando color al mapa
+
+ggplot(data = mx) +
+geom_sf(fill = "darkolivegreen3", colour = "black")
+```
+
+El coloreado anterior es muy simple, porque usa el mismo para todo el gráfico. Una manera más interesante de colorearlo es usar un degradado, que se puede establecer con una variable de interés en la base de datos. Implementaremos la paleta "magma" para el gradiente del color que será nuevamente la densidad poblacional será el objetivo en el mapa de México. La diferencia con gráficos pasado, es que se aplica una transformación logarítmica a la densidad. La escala de color se agrega con la función ***scale_fill_viridis_c()*** y la paleta se establece con *option="viridis"*, otras pueden ser: "viridis", "magma", "plasma", "inferno", "cividis", entre otras.
+
+```{r}
+# Creamos un mapa con una escala continua de colores
+
+ggplot(data = mx) +
+geom_sf(aes(fill = dens), color="white") +
+scale_fill_viridis_c(option = "magma", trans = "log") +
+ggtitle("Densidad poblacional") +
+theme(plot.title = element_text(hjust = 0.5)) +
+labs(fill=expression("Densidad (hb/km"^2*")"))
+```
+
+O el coloreado degradado se puede hacer mediante una forma personalizada con las funciones ***classIntervals()*** o ***cut()***. Por ejemplo:
+
+```{r}
+# Definimos el número de intervalos y el método
+
+intervalos <- classIntervals(mx$dens, n = 6, style = "quantile")
+
+umbrales <- intervalos$brks
+
+# Separamos o reclasificamos cada obseración en un intervalo
+
+mx$cat <- cut(mx$dens, umbrales, include.lowest = TRUE)
+
+# Finalmente se grafica
+
+ggplot(data = mx) +
+  geom_sf(aes(fill = cat), color="grey") +
+  scale_fill_brewer(palette = "Greens") +
+  ggtitle("Densidad poblacional") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(fill=expression("Densidad (hb/km"^2*")"))
+
+```
+
+Para definir el sistema de coordenadas para proyectar o la extensión del mapa, la función ***coord_sf()*** permite tratar con ello. Los mapas se dibujan tomando el sistema de coordenadas de la primera capa, si este es *NA*, entonces se establece el WGS84. Cuando se usa el argumento *crs*, se puede modificar o anular la configuración y proyectar de manera libre a cualquier proyección, lográndose con cualquier cadena PROJ4 válida. Así pues:
+
+```{r}
+# Sistema de referencia
+
+ggplot(data = mx) +
+  geom_sf() +
+  coord_sf(crs = "epsg:5069") # Albers
+```
+
+El tamaño del mapa, la amplitud o hacer "zoom", también se modifican en la función ***coord_sf()***, delimitando los extremos del eje X y eje Y, pero está delimitación depende completamente de la proyección que se está utilizando. Al reducir los extremos de los mapas, estos se convierten en una fracción para evitar superposiciones, esto se controla con el argumento *expand = FALSE* que evita fracciones y permite ver en escala original.
+
+```{r}
+# Aumentar el mapa
+
+ggplot(data = mx) +
+  geom_sf(fill = "darkgrey" , colour = "black") +
+  coord_sf(xlim = c(2201757,3101494), ylim = c(634317,1296059),
+           expand=F)
+```
+
+Para aumentar la legibilidad del mapa y hacer más fácil la identificación de los estados, se les puede poner sus nombres, esto con la función ***geom_sf_label()***
+
+```{r}
+# Agregando etiquetas
+
+ggplot(data = mx) +
+  geom_sf(fill = "darkgrey" , colour = "black") +
+  geom_sf_label(aes(label = NOM_ENT)) +
+  coord_sf(xlim = c(2201757,3101494), ylim = c(634317,1296059),
+           expand=F)
+```
+
+Los últimos elementos que veremos será agregar la escala gráfica al mapa, el norte y algo de texto. Para ubicar la posicón de la escala del mapa, se usan los argumentos *pad_x* y *pad_y*. Veamos un ejemplo:
+
+```{r}
+# Se crea un mapa con leyenda y escala continua de colores
+
+ggplot(data = mx) +
+  geom_sf(aes(fill = cat), color="black", lwd=0.3) +
+  scale_fill_brewer(palette = "OrRd") +
+  ggtitle("Densidad poblacional") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(fill=expression("Densidad (hb/km"^2*")")) +
+  annotation_scale(location = "bl", width_hint = 0.5) +
+  annotation_north_arrow(location = "bl", which_north = "true",
+                         pad_x = unit(9, "cm"), pad_y = unit(6, "cm"),
+                         style = north_arrow_fancy_orienteering) +
+  annotate(geom="text", x=3500000, y=1500000, label="Golfo de México",
+           color="black", size = 3)
+```
+
+## Elaboración de un mapa con tmap
+
+Finalmente, veremos cómo crear mapas con la librería **tmap**, la cual también permite crear mapas temáticos con una gran flexibilidad. La forma de hacerlo, será muy natural porque su sintaxis es similar a la de ***¿ggplot2*** que consiste en sobre poner capas.
+
+La función ***qtm()*** permite dibujar un mapa de manera rápida, indicando el nombre del objeto espacial y la variable de interés. Por ejemplo:
+
+```{r}
+# Cargamos la librería tmap
+
+# library(tmap)
+
+# Realizamos el gráfico 
+
+qtm(mx, "dens", col = "green")
+```
+
+El gráfico anterior es una representación rápida de la densidad poblacional en los estados mexicanos. Claramente es un gráfico binario, donde el color más oscuro corresponde a la Ciudad de México y los demás estados son claros. Notemos que en la leyenda se establecen Particiones iguales, lo cual ya hemos explorado que es un problema.
+
+Para definir particiones de rangos diferentes en el argumento *fill.scale* usamos la función ***tm_scale_intervals()*** y establecemos la manera en que se quiere hacer la partición. Por ejemplo:
+
+```{r}
+qtm(mx, fill = "dens", 
+    fill.scale = tm_scale_intervals(style = "jenks"))
+```
+
+La función ***qtm()*** tiene muchas maneras de personalizar los resultados, pero vamos a explorar otras funciones de **tmap** que se basa en la idea de acumular capas, para obtener mapas basados en diferentes capas de información.
+
+La función ***tm_shape()*** permite llamar a un objeto espacial, que para nuestro caso es un mapa de polígonos de los estados mexicanos, serán coloreados de acuerdo a los valores de una variable, que en nuestro caso es la densidad poblacional, divididos o reclasificados con un método (fisher), se elegirá por ejemplo 7 rangos.
+
+```{r}
+tm_shape(mx)+
+  tm_polygons("dens", 
+              fill.scale = tm_scale_intervals(7, style = "fisher"),
+              fill.legend = tm_legend(title="Densidad",
+                                      position = tm_pos_in("right",
+                                                           "top")))
+```
+
+Vamos a mejorar la apariencia del gráfico. Algunas funcionalidades como: ***tm_logo()***, ***tm_scalebar()*** y ***tm_compass()***, permiten agregar imaganes o logos al mapa, la escala de medida del mapa y una brújula que indica el norte, respectivamente. La función \*\*\* tm_legend()\*\*\* permite agregar y personalizar la leyenda, ***tm_grid()*** permite poner una malla de coordenadas al mapa. Vamos a implementar estas funciones para agregar estética al mapa.
+
+```{r}
+# Mejorar la estetica del mapa
+
+tm_shape(mx)+
+  tm_polygons("dens", 
+              fill.scale = tm_scale_intervals(7, style = "quantile"),
+              fill.legend = tm_legend(title = "Mapa de densidad",
+                                      position = tm_pos_out("right"),
+                                      width = 8))+
+  tm_logo("DatosCap7/logoR.jpg", height = 1, position = c("center","top"))+
+  tm_scalebar(c(0, 250, 500, 750), position = c("left", "bottom")) +
+  tm_compass(position = c("right", "top"), size = 2) +
+  tm_grid(col = "grey", crs = 4326)
+```
+
+La función **tm_shape()** nos solo permite dibujar polígonos, sino que permite combinar diferentes elementos espaciales como: polígonos, puntos, líneas, entre otros; en un mismo plot. El procedimiento se hace secuencialmente, por ejemplo:
+
+```{r}
+# Cargamos el mapa de las caterreteras
+
+carr <- st_read("DatosCap7/carreteras.gpkg")
+
+# Graficamos el mapa de estados y (encima) el de carreteras
+
+tm_shape(mx) +
+  tm_polygons("dens", 
+              fill.scale = 
+                tm_scale_intervals(style = "quantile",
+                                   n = 5,
+                                   values = "kovesi.cy_or"),
+              fill.legend = tm_legend(title=expression("Densidad (hab/km"^2*")"),
+                                      position = tm_pos_out("right"),
+                                      width=11)) +
+  tm_scalebar(c(0, 250,500), position = c("left", "bottom")) +
+  tm_shape(carr) +
+  tm_lines(col = "red", lwd = 0.6)
+```
+
+Los mapas de pueden mejorar agregando elementos gráficos que aporten más información a la visualización de un fenómeno. En el siguiente mapa veremos como una combinación simultanea de dos variables, se incorpora a un mapa. Allí veremos la representación del indice de masculinidad y la población total del estado. Este modo, el indice de masculinidad estará representado en el coloreado del estado, mientras que el tamaño de la burbuja representa el tamaño poblacional.
+
+```{r}
+tm_shape(mx)+
+  tm_polygons("IM", 
+              fill.scale = tm_scale_intervals(midpoint=100,
+                                              values = divergente),
+              fill.legend = tm_legend(title="IM", 
+                                      position = tm_pos_in("right", "top"),
+                                      width=7))+
+  tm_bubbles(size = "Poptotal", col="red",
+             size.legend = tm_legend(title = "Población",
+                                     position = tm_pos_in("left", "bottom"),
+                                     width=6))
+  
+```
+
+También se pueden mostrar los datos en formato *raster* con la función ***tm_raster()***. Veamos un ejemplo:
+
+```{r}
+# Se carga el paquete raster
+
+# library(raster)
+
+# Se llama al objeto y se almacena en la variable dem
+
+dem <- raster("DatosCap7/DEM_Mx.tif")
+
+print(dem)
+```
+
+```{r}
+# Se grafica con la librería tmap
+
+tm_shape(dem) +
+  tm_raster("DEM_Mx", 
+            col.scale= tm_scale(values = terrain.colors(12)),
+            col.legend = tm_legend(title="Elevación",
+                                   position = tm_pos_in("left","bottom"),
+                                   width=8)) +
+  tm_shape(carr) +
+  tm_lines(col="blue", lwd=0.8)
+```
+
+Una base de datos comúnmente tiene muchas variables que se pueden analizar, es por ello que se pueden graficar varios mapas en un panel o mosaico. Veamos algunso ejemplos:
+
+```{r}
+# Mapas para dos variables de manera simultanea
+
+tm_shape(mx)+
+  tm_polygons(c("dens", "IM"),
+              fill.scale = tm_scale_intervals(style = "quantile", n = 6),
+              fill.legend = tm_legend(position = tm_pos_in("left","bottom"),
+                                      width=4, frame=F))
+```
+
+Otra manera de visualizar varios mapas, es tomar una variable categórica y hacer un mapa para cada una de las categorías. Por ejemplo, veremos unas segregación de acuerdo a la región.
+
+```{r}
+# Mapas de acuerdo a la región
+
+tm_shape(mx) +
+  tm_polygons("dens",
+              fill.scale = tm_scale_intervals(style = "quantile", n = 6),
+              fill.legend = tm_legend(position = tm_pos_out("right"))) +
+  tm_grid(col = "grey", crs = 4326) +
+  tm_facets(by="Region",ncol = 2)
+```
+
+Para guardar mapas, es similar a los que hemos hecho con otras funciones. Se hace con la función ***tmap_save()***, similar al ***pgn()***.
+
+```{r}
+# Asigna el mapa al objeto "mapita"
+
+mapita <- tm_shape(mx) +
+  tm_polygons("dens",
+              fill.scale = tm_scale_intervals(style = "fisher", n = 7),
+              fill.legend = tm_legend(title="Densidad",
+                                      position = tm_pos_in("right", "top")))
+
+# Salva mapita
+
+tmap_save(mapita,"DatosCap7/map_dens.png", width = 12, height = 9,
+          units = "cm", dpi = 300)
+```
+
+Si se está trabajando para visualizar un archivo html, una app shiny o se puede interactuar con el mapa de manera dinámica, existe la función ***tmap_mode("view")***, con la cual se generan mapas dinámicos o interactivos.
+
+```{r}
+tmap_mode("plot")
+tm_shape(mx) +
+  tm_polygons ("IM", fill.scale = tm_scale(midpoint = 100))
+```
+
+Se finaliza el modo interactivo con la instrucción: ***tmap_mode("plot")***.
+
+# Bibliografía
+
+Mas, J.-F. (2025). Análisis espacial con R: Usa R como un Sistema de Información Geográfica. Centro de Investigaciones en Geografía Ambiental (CIGA), UNAM. https://doi.org/10.22201/ciga.9786075875347e.2025
