@@ -10,23 +10,386 @@ format:
 editor: visual
 ---
 
-## Quarto
+# Introducción
 
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+El proceso de geocodificación es muy importante en el análisis de datos espaciales, pues es una abstracción de una dirección de un lugar, una descripción, o nombres de lugares a un sistema de coordenadas, usualmente coordenadas geográficas que están formadas por longitud y latitud. El objetivo es observar la distribución espacial de los datos, para medir un fenómeno de interés, viendo su comportamiento representado en un mapa, planteado hipótesis sobre una relación espacial y validandola. Es importante hablar de dos procesos en el mapeo de datos espaciales, los cuales suelen confundirse a menudo:
 
-## Running Code
+- **Geocodificación:** Es el proceso en el cual una ubicación que está dada a través de una dirección, nombre o descripción de un lugar, se transforma a un sistema de coordenadas del tipo longitud y latitud
 
-When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+- **Georreferenciación:** Es el proceso en el cual se toman unas coordenadas geográficas (del tipo longitud y latitud), y se transforman o proyectan a un mapa, por ejemplo hacer una proyección al sistema de referencia GWS84 con el objetivo de ubicarlo con la mayor precisión posible.
+
+En especial, trabajaremos con dos procedimientos en este ejercicio, que consiste en hacer una geocodificación de unas direcciones para obtener las coordenadas y su proceso inverso, denominado geocodificación inversa que es pasar de longitudes y latitudes a direcciones o características del lugar.
+
+# Datos y materiales de la práctica
+
+Para realizar este trabajo se emplean dos bases de datos, una corresponde a 20 direcciones propias y recopiladas de manera aleatoria. Corresponden a múltiples lugares en la ciudad de Medellín como: iglesias, centros comerciales, casas, entre otras. El segundo dataset corresponde a datos inmuebles en la ciudad de Cali, Colombia, con dos hojas: Datos Vivienda (8322 registros con zona, estrato, precio, área, y coordenadas) y multicentro (27 registros adicionales del sector “Multicentro”).
+
+El insumo institucional de hospitales de Antioquia se consume directamente desde la API de datos abiertos de Colombia (ver Sección 9). Esto hace la práctica totalmente reproducible: no depende de archivos que el portal de origen pudo haber renombrado, movido o retirado.
+
+# Preparación del entorno
+
+## Cargado de librerías
+
+El primer paso que realizaremos será el cargado de los paquetes necsarios para ejecutar los diferentes procedimientos:
 
 ```{r}
-1 + 1
+library(readxl)       # Lectura de archivos xlsx
+library(readr)        # Lectura de archivos planos
+library(jsonlite)     # Lectura de la API de datos abiertos
+library(tmaptools)    # Geocodificación (Nominatim/OSM)
+library(tidygeocoder) # Geocodificación (múltiples motores)
+library(leaflet)      # Visualización interactiva
+library(tidyverse)    # Manipulación de datos y visualización
+library(magrittr)     # Uso de los pipes |>
+library(janitor)      # Limpieza de nombres de columnas
+library(tmap)         # Creación de mapas
+library(DT)           # Manejo o formateo de tablas en HTML
+library(sf)           # Manejo de datos vectoriales y distancias métricas
+library(knitr)        # Salidas de tablas
+library(kableExtra)   # Salidas de tablas
+
+# geocode_OSM() (tmaptools) usa internamente utils::download.file(), que en
+# algunas redes con proxy o inspección SSL falla con el mensaje "no fue
+# posible abrir la URL" aunque el resto de R (curl/httr, usado por
+# tidygeocoder) sí tenga salida a internet. Forzar el método "libcurl"
+# suele resolver esa discrepancia; si en su equipo ya usan "libcurl" por
+# defecto, esta línea no tiene ningún efecto negativo.
+
+options(download.file.method = "libcurl", timeout = 60)
 ```
 
-You can add options to executable code like this
+## Verificación de la conectividad
+
+Para la geocodificación se requiere llamar algunas APIs que permitan el proceso de geocodificación, es por eso que vamos a verificar si nuestro programa es capaz de llamarlas y estas funcionar adecuadamente. Este proceso es necesario porque algunos dominios están restringidos, puede ser por seguridad en la red en algunas instituciones.
 
 ```{r}
-#| echo: false
-2 * 2
+verificar_host <- function(url) {
+  tryCatch({
+    httr::GET(url, httr::timeout(5))
+    TRUE
+  }, error = function(e) FALSE)
+}
+
+tibble(
+  servicio = c("Nominatim (OSM)", "ArcGIS", "Datos Abiertos Colombia"),
+  url = c("https://nominatim.openstreetmap.org",
+          "https://geocode.arcgis.com",
+          "https://www.datos.gov.co")
+) %>%
+  mutate(disponible = map_lgl(url, verificar_host))
 ```
 
-The `echo: false` option disables the printing of code (only output is displayed).
+Una vez que se verifica que los servicios están en correcto funcionamiento, se procede a implementar dos funciones de geocodificación. Estas funciones envuelven las funciones ***geo()*** y ***geocode_OMS()***, para que cualquier error de geocodificación no detenga el proceso.
+
+```{r}
+geocodificar_seguro <- function(address, method = "osm", delay=1, ...) {
+  
+  Sys.sleep(delay)
+  
+  tryCatch(
+    geo(address = address, method = method, ...),
+    error = function(e) {
+      message("No fue posible geocodificar con el método '", method, "': ", conditionMessage(e))
+      tibble(address = address, lat = NA_real_, long = NA_real_)
+    }
+  )
+}
+
+geocode_OSM_seguro <- function(q, ...) {
+  tryCatch(
+    as_tibble(geocode_OSM(q, ...)),
+    error = function(e) {
+      message("No fue posible geocodificar con geocode_OSM(): ", conditionMessage(e))
+      tibble(query = q, lat = NA_real_, lon = NA_real_,
+             lat_min = NA_real_, lat_max = NA_real_,
+             lon_min = NA_real_, lon_max = NA_real_)
+    }
+  )
+}
+
+reverse_geocodificar_seguro <- function(lat, long, method = "osm", ...) {
+  tryCatch(
+    reverse_geo(lat = lat, long = long, method = method, ...),
+    error = function(e) {
+      message("No fue posible geocodificar de forma inversa con el método '", method, "': ",
+              conditionMessage(e))
+      tibble(lat = lat, long = long, address = NA_character_)
+    }
+  )
+}
+
+# geocode_OSM() cambia de forma según el número de consultas: con una sola
+# dirección retorna una lista (con $coords), no un data.frame. Este wrapper
+# preserva esa forma para que $coords siga funcionando en las demostraciones
+# de un solo punto, incluso si el servicio no está disponible.
+
+geocode_OSM_punto_seguro <- function(q, ...) {
+  tryCatch(
+    geocode_OSM(q, ...),
+    error = function(e) {
+      message("No fue posible geocodificar '", q, "' con geocode_OSM(): ", conditionMessage(e))
+      list(query = q, coords = c(x = NA_real_, y = NA_real_))
+    }
+  )
+}
+```
+
+# Conceptos clave antes de empezar
+
+Antes de realizar la geocodificación, es importante tener en cuenta algunos aspectos que pueden ayudar en la precisión de la geocodificación:
+
+- **Estandarización de direcciones:** Los procesos de geocodificación funcionan mejor cuando las direcciones están en un formato más limpio, evitar usar abreviaturas inconsistentes (*KR* vs. *CR* vs. *Cra.*), símbolos extraños (*\#*, *Nro*, $\bf{N^\circ}$) o cualquier tipo de almohadilla, hacen que las direcciones no se geocodifiquen correctamente.
+
+- **Precisión y calidad del resultado:** Aunque el proceso de geocodificación consiste en obtener un par de coordenadas, el proceso no es tan simple, porque buscar un punto en el espacio es muy complejo. Es importante hacer una revisión de qué tan confiable es el resultado, qué tan símil es, qué tan preciso fue. Por ello, la función ***tidygeocoder::geo()***, permite hacer una inspección de campos adicionales y así verificar de manera más activa el resultado.
+
+- **Límites de uso (rate limits) y atribución:** El servicio obtenido por Nominatim de OpenStreetMap que se emplea en las funciones ***geocode_OSM()*** y ***geo(method = "osm")***, tiene un límite de uso, que es una solicitud por minuto; por ello si se requieren procesar grandes volúmenes de datos se debe usar un proveedor comercial (pagando). Además, el servicio gratuito exige o pide atribución en cualquier mapa o elemento publicado, en el que se hayan empleado servicios de geocodificación. 
+
+- **Cobertura geográfica del servicio:** No todos los motores de geocodificación tienen cobertura mundial, si se quiere hacer un mapa espacial y se requiere geocodificar en todos los países, los diferentes motores tienen limitaciones en ese aspecto. Por ejemplo, el método *census* de **tidygeocoder** solo codifica en Estados Unidos. Para Colombia, los que funcionan relativamente bien son los métodos *osm* (Nominatim) y *arcgis*.
+
+- **Guardar (cachear) los resultados:** Cada vez que se requiera correr un código, los servicios de API vuelven a consultar. Es por ello que, si ya el proceso de geocodificación fue exitoso, entonces conviene guardar los resultados (***saveRDS()*** o ***write_csv()***) y simplemente usarlos en caso de requerirlos.
+
+# Geocodificación de una dirección
+
+Para la geocodificación, vamos a emplear dos funciones, la primera es ***geocode_OSM()*** de **tmaptools** y la segunda es ***geo()*** del paquete **tidygeocoder**. Veamos el desempeño de cada una
+
+## tmaptools::geocode_OSM()
+
+Lo primero que haremos es definir una región, por ejemplo la Ciudad de Medellín. Note que no usar tildes, fue una de las recomendaciones para hacer una geocodificación más precisa
+
+```{r}
+# Especificar una región
+tm1 <- geocode_OSM_punto_seguro("Medellin, Colombia")
+tm1
+```
+
+Encontremos un lugar en la ciudad, por ejemplo la Universidad Nacional de Colombia
+
+```{r}
+# Dar un lugar
+tm2 <- geocode_OSM_punto_seguro("Universidad Nacional de Colombia, Medellin, Colombia")
+tm2
+```
+Allí, obtenemos las coordenadas. Latitud y longitud
+
+En vez de buscar un lugar o geocodificarlo usando una descripción de él, lo buscamos dando la dirección, obtenemos:
+
+```{r}
+# Dar una dirección con nomenclatura
+tm3 <- geocode_OSM_punto_seguro("Cra. 87 30-65, Medellin, Colombia")
+tm3
+```
+
+## tidygeocoder::geo()
+
+El procedimiento que realizamos anteriormente, se puede hacer también con la función ***geo()***. Observaremos algunos indicadores de la calidad de la coincidencia (*class*, *type*, *importance*, entre otros). Veamos un ejemplo:
+
+```{r}
+# Especificar una región
+td1 <- geocodificar_seguro("Medellin, Colombia", method = "osm")
+print(td1)
+```
+
+Los resultados son virtualmente los mismos que se obtivieron con la otra función.
+
+Ahora, geocodificaremos un parque conocido en la ciudad.
+
+```{r}
+# Dar un lugar, con metadatos de calidad
+td2 <- geocodificar_seguro("Parque Explora, Medellín, Colombia",
+                            method = "osm", full_results = TRUE)
+td2 %>% select(address, lat, long, any_of(c("class", "type", "importance")))
+```
+
+Si se evaluan los resultados, se puede decir que son bastante buenos. Lo que sucede es que si se tiene 1.000 o 10.000 lugares, hacer control de calidad se vuelve algo complejo, aún más si los lugares no son conocidos o no se tiene su contexto.
+
+Codificar una dirección cualquiera, obtenemos los siguientes resultados:
+
+```{r}
+# Dar una dirección con nomenclatura
+td3 <- geocodificar_seguro("Cl. 68 48-30, Medellin, Colombia", method = "osm")
+print(td3)
+```
+
+## Otros motores de geocodificación
+
+Como se mencionó al comienzo, un motor como *census* es gratuito, pero solo geocodifica en Estados Unidos, lo cual es una limitación para datos de otros países, pero es una buena herramienta.
+
+Los motores de *google*, *mapbox*, *here*, *opencage*, *geocodio*, entre otros, requieren usar llaves de APIs, lo que implica un costo para el proceos de geocodificación. 
+
+Las versiones gratuitas *osm* y *arcgis*, que hemos explorado son relativamente buenas para los procesos que requerimos.
+
+
+## Visualización con leaflet
+
+Un paso muy natural, una vez que se ha hecho la geocodificación es graficar los resultados en un mapa, para observar su comportamiento espacial. Una de las librerías más famosas para crear mapas es **leaflet**, que funciona de manera similar a **ggplot2** (basado en acumular capas). Veamos un ejemplo:
+
+```{r}
+unal <- geocode_OSM_punto_seguro("Universidad Nacional de Colombia, Medellin, Colombia")
+
+leaflet() %>%
+  addTiles() %>%
+  addMarkers(lng = unal$coords[1], lat = unal$coords[2],
+             popup = "Universidad Nacional de Colombia - Sede Medellín")
+```
+
+La librería **leaflet** tiene una gran cantidad de funcionalidades, las cuales permiten personalizar las marcas de los puntos, usando diferentes símbolos. Permite agregar círculos personalizando su radio y color, entre otros elementos. Veamos el siguiente mapa:
+
+```{r}
+explora <- geocode_OSM_punto_seguro("Parque Explora, Medellin, Colombia")
+
+leaflet() %>%
+  addTiles() %>%
+  addCircleMarkers(lng = unal$coords[1], lat = unal$coords[2],
+                   color = 'blue', radius = 20, popup = 'UNAL') %>%
+  addCircleMarkers(lng = explora$coords[1], lat = explora$coords[2],
+                   color = 'red', radius = 30, popup = 'Parque Explora')
+```
+
+
+# Comparación cuantitativa de motores de geocodificación
+
+Hemos explorado algunas de las ideas básicas en la geocodificación con dos funciones, comparaciones simples y descriptivas, basadas en los output de las funciones. Ahora vamos a hacer algo más elaborado, con las 20 direcciones de lugares en la ciudad. La idea es cuantificar qué tanto difieren los motores en la geocodificación, realmente no se puede establecer cuál lo hace mejor porque no tenemos las coordenadas exactas como punto de referencia. 
+
+
+## Lectura y estandarización de direcciones
+
+Vamos a cargar las 20 direcciones y si no están estandarizadas, se modifican:
+
+```{r}
+# Leeemos las 20 direcciones
+
+direcciones <- read_excel("Datos/DireccionesMedellin.xlsx")
+
+# Vemos el encabezado
+
+head(direcciones)
+```
+
+```{r}
+dir <- with(direcciones, paste(DIRECCCION, CIUDAD, PAIS, sep = ', ')) %>%
+  str_replace(., "Medellín", "Medellin")
+dir
+```
+
+Como observación, si este paso no se ejecuta de manera correcta en la geocodificación, entonces se volverá a él.
+
+
+## Geocodificación con los tres enfoques
+
+Recordemos que la idea es hacer una comparación entre los tres métodos de geocodificación que tenemos disponibles:
+
+- El primero manera será con la función ***geocode_OSM *** y el método *OSM* de OpenStreetMap Nominatim.
+
+- El segundo es usar la función ***geo()*** y nuevamente el método *OSM*
+
+- La tercera manera nuevamente con la función ***geo()***, pero con el método *arcgis*
+
+```{r}
+osm_tmaptools <- geocode_OSM_seguro(dir) %>%
+  transmute(direccion = query, lat_tmap = lat, long_tmap = lon)
+
+geo_osm <- geocodificar_seguro(dir, method = "osm") %>%
+  transmute(direccion = address, lat_osm = lat, long_osm = long)
+
+geo_arcgis <- geocodificar_seguro(dir, method = "arcgis") %>%
+  transmute(direccion = address, lat_arcgis = lat, long_arcgis = long)
+```
+
+
+## ¿Qué tan de acuerdo están los tres métodos? Distancias en metros
+
+Para comparar los tres métodos, haremos una proyección a un sistema de referencia en metros (UTM zona 18N, EPSG:32618, adecuado tanto para Medellín como para Cali), el cual nos permite medir la distancia en metros entre cada una de las geocodificaciones. Esto lo haremos con la función ***sf::st_distance()***
+
+```{r}
+comparacion <- osm_tmaptools %>%
+  left_join(geo_osm, by = "direccion") %>%
+  left_join(geo_arcgis, by = "direccion")
+
+dist_m <- function(lat1, long1, lat2, long2) {
+  # Robusta a NA: si un proveedor no estuvo disponible en la red del usuario,
+  # las filas correspondientes simplemente quedan en NA en lugar de fallar.
+  out <- rep(NA_real_, length(lat1))
+  ok <- stats::complete.cases(lat1, long1, lat2, long2)
+  if (any(ok)) {
+    p1 <- st_as_sf(tibble(long1 = long1[ok], lat1 = lat1[ok]),
+                    coords = c("long1", "lat1"), crs = 4326)
+    p2 <- st_as_sf(tibble(long2 = long2[ok], lat2 = lat2[ok]),
+                    coords = c("long2", "lat2"), crs = 4326)
+    out[ok] <- as.numeric(st_distance(st_transform(p1, 32618),
+                                       st_transform(p2, 32618),
+                                       by_element = TRUE))
+  }
+  out
+}
+
+comparacion <- comparacion %>%
+  mutate(
+    d_tmap_osm    = dist_m(lat_tmap, long_tmap, lat_osm, long_osm),
+    d_osm_arcgis  = dist_m(lat_osm, long_osm, lat_arcgis, long_arcgis),
+    d_tmap_arcgis = dist_m(lat_tmap, long_tmap, lat_arcgis, long_arcgis)
+  )
+
+comparacion %>%
+  select(direccion, starts_with("d_")) %>%
+  head(5) %>% 
+  kable(
+    format = "latex",
+    digits = 1,
+    booktabs = TRUE
+  ) %>%
+  kable_styling(latex_options = c("striped", "hold_position"))
+```
+
+La tabla anterior la podemos resumir usando algunas medidas de estadística descriptiva:
+
+```{r}
+comparacion %>%
+  summarise(across(starts_with("d_"),
+                    list(min = min, mediana = median, media = mean, max = max, sd=sd),
+                    na.rm = TRUE, .names = "{.col}_{.fn}")) %>%
+  pivot_longer(everything()) %>%
+  print(n = Inf)
+```
+
+Los resultados muestran que el lugar donde termina ubicada una dirección cambia bastante según la herramienta que se usa Cuando se comparan dos formas de usar OpenStreetMap, muchas direcciones caen exactamente en el mismo punto, pero en otras hay diferencias de unos cientos de metros porque cada paquete le consulta a la plataforma de una manera distinta. La diferencia media más grande aparece al comparar OpenStreetMap en *tmap* contra *ArcGIS*: ahí las direcciones se alejan casi dos kilómetros en promedio y algunas terminan a casi $10\text{ km}$ de distancia. Además, en todos los casos la mayoría de los puntos quedan cerca, pero unos pocos errores gigantescos hacen que la distancia promedio se dispare.
+
+
+## Mapa comparativo
+
+El siguiente mapa ilustra la comparación que se está realizando. Se insiste en que no hay una manera de determinar con cierta precisión qué motor de geocodificación es mejor. Es claro en el mapa que existen direcciones que se geocodifican con más precisión que otras. 
+
+```{r}
+leaflet(comparacion) %>%
+  addTiles() %>%
+  addCircleMarkers(lng = ~long_tmap, lat = ~lat_tmap, color = "blue",
+                    radius = 6, popup = ~paste(direccion, "(geocode_OSM)"),
+                    group = "geocode_OSM") %>%
+  addCircleMarkers(lng = ~long_osm, lat = ~lat_osm, color = "green",
+                    radius = 6, popup = ~paste(direccion, "(geo - osm)"),
+                    group = "geo() - osm") %>%
+  addCircleMarkers(lng = ~long_arcgis, lat = ~lat_arcgis, color = "red",
+                    radius = 6, popup = ~paste(direccion, "(geo - arcgis)"),
+                    group = "geo() - arcgis") %>%
+  addLayersControl(overlayGroups = c("geocode_OSM", "geo() - osm", "geo() - arcgis"),
+                    options = layersControlOptions(collapsed = FALSE)) %>%
+  addLegend(colors = c("blue", "green", "red"),
+            labels = c("geocode_OSM (tmaptools)", "geo - osm (tidygeocoder)", "geo - arcgis (tidygeocoder)"),
+            title = "Motor de geocodificación")
+```
+
+
+# Geocodificación inversa como control de calidad
+
+
+
+
+
+
+
+
+
+
+
+
+
+
