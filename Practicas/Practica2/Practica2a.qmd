@@ -1,0 +1,355 @@
+---
+title: "Práctica 2 de estadística espacial"
+date: today
+author:
+  - name: "Nombre: Luis Gabriel Osorno Muñoz, CC: 1032456789"
+    affiliation: "Universidad Nacional de Colombia - Sede Medellín, Facultad de Ciencias"
+format:
+  typst:
+    mainfont: "Liberation Sans"
+execute:
+  knitr:
+    opts_chunk:
+      dev: "png"
+      dpi: 300
+always_allow_html: true
+editor: visual
+---
+
+# Introducción
+
+El objetivo de este documento es desarrollar la segunda práctica del curso de Estadística Espacial enfocada en el procesamiento y análisis de objetos vectoriales (puntos y polígonos) para la ciudad de Santiago de Cali con el paquete `sf` en R. A lo largo del ejercicio se explora la integración de datos y la preservación de la clase espacial tras transformaciones tabulares, la imputación de atributos por zona y el cálculo de la tasa de homicidios por cada 10.000 habitantes. Adicionalmente, se efectúa una evaluación topológica sobre la asignación de puntos según el operador espacial empleado (`st_intersects()` frente a `st_within()`), justificando las variaciones observadas en las fronteras intercomunales.
+
+En segundo lugar, se evalúa la disponibilidad de información pública en el portal de Datos Abiertos de Cali mediante un ejercicio de "Shapefile forense", concluyendo que los datos reales se encuentran agregados en tablas CSV por año sin microdatos georreferenciados (`.dbf`), lo que justifica el uso de variables simuladas para validar el flujo analítico.
+
+# Ejercicios propuestos
+
+Vamos a resolver los siguientes ejercicios usando como guía lo visto en clase, para replicar el código y así interiorizarlo.
+
+```{r}
+# Se cargan las librerias a utilizar
+
+library(sf)         # manejo moderno de datos espaciales vectoriales
+library(dplyr)       # manipulación de datos
+library(readr)        # lectura de archivos planos con control de codificación
+library(tidyr)          # utilidades de limpieza (replace_na, etc.)
+library(ggplot2)          # visualización, incl. geom_sf()
+
+# El shapefile ESRI es un formato multi-archivo: si falta el índice .shx,
+# GDAL puede reconstruirlo a partir de la geometría (ver sección siguiente).
+Sys.setenv(SHAPE_RESTORE_SHX = "YES")
+```
+
+## Repita la consulta espacial de la Parte 3
+
+Para una comuna distinta a la 13 y verifique nuevamente que el filtro por atributo y la intersección espacial coincidan.
+
+Para ello, debemos cargar los datos a emplear en la práctica. El primer dataset corresponde a la geometría de las comunas en Cali.
+
+```{r}
+# --- Comunas de Cali ---
+# El CRS se lee automáticamente y el identificador de comuna (COMUNA) es un atributo.
+
+comunas <- st_read("data/Comunas/bcs_lim_comunas_WGS84.shp", quiet = TRUE) %>%
+  rename_with(tolower) %>%
+  mutate(comuna = as.integer(comuna))
+
+cat("CRS de comunas:", st_crs(comunas)$input, "\n")
+```
+
+El segundo dataset contiene los reportes de homicidios en la misma ciudad. Realizamos un filtrado de los datos, para geometrías que no tienen sentido o están fuera de la ciudad.
+
+```{r}
+# --- Homicidios 2017 en Cali ---
+
+homicidios_raw <- st_read("data/Homicidios2017/2017_0_WGS84.shp", quiet = TRUE)
+st_crs(homicidios_raw) <- 4326
+
+# Buena práctica: SIEMPRE validar la geometría importada antes de analizarla.
+# Este shapefile en particular trae "geometrías nulas" de ESRI (coordenadas
+# centinela -1.797693e+308) que deben descartarse.
+coords_chk <- st_coordinates(homicidios_raw)
+son_validas <- coords_chk[, "X"] >= -180 & coords_chk[, "X"] <= 180 &
+               coords_chk[, "Y"] >=  -90 & coords_chk[, "Y"] <=  90
+cat("Puntos con geometría nula/ inválida descartados:", sum(!son_validas),
+    "de", nrow(homicidios_raw), "\n")
+```
+
+Adicionalmente, vamos a simular la modalidad de hurto ocurrida. Es decir, si fue un homicidio con: "ARMA DE FUEGO", "ARMA CORTOPUNZANTE", "OTRO".
+
+```{r}
+homicidios <- homicidios_raw[son_validas, ]
+
+# Se simulan modalidad y edad de forma reproducible. Las proporciones de modalidad son
+# ilustrativas y no deben interpretarse como estadística oficial.
+set.seed(2024)
+homicidios$modalidad <- sample(
+  c("ARMA DE FUEGO", "ARMA CORTOPUNZANTE", "OTRO"),
+  size = nrow(homicidios), replace = TRUE, prob = c(0.70, 0.20, 0.10)
+)
+homicidios$edad <- pmax(15, round(rnorm(nrow(homicidios), mean = 29, sd = 9)))
+```
+
+Como una primera aproximación al conjunto de datos, vamos a grafica los dataset que tenemos.
+
+```{r}
+# Visualizar mapa inicial
+
+ggplot() +
+  geom_sf(data = comunas, fill = "grey95", color = "grey40") +
+  geom_sf(data = homicidios, color = "firebrick", size = 0.6, alpha = 0.6) +
+  labs(title = "Comunas de Cali y homicidios registrados (2017)",
+       caption = "Polígonos y su identificador de comuna: reales. Modalidad/edad de homicidios: simuladas.") +
+  theme_minimal()
+```
+
+Una de las primeras operaciones entre objetos espaciales es la interesección. Para ello, usamos la función st_join() con left = FALSE para cruzar los puntos de homicidios con el mapa de las comunas de Cali. Esto hace dos cosas a la vez: filtra los datos para conservar solo los puntos dentro de la zona urbana y les asigna automáticamente la columna de la comuna a la que pertenecen.
+
+```{r}
+homicidios_urbanos <- st_join(homicidios, comunas, join = st_intersects, left = FALSE)
+
+cat("Puntos dentro del área urbana (con comuna asignada):", nrow(homicidios_urbanos),
+    "de", nrow(homicidios), "puntos válidos\n")
+```
+
+Vamos a contruir un mapa de los homicidios ocurridos en la comuna 17, exporaremos dos vías distintas y verificaremos que ambos resultados coincidan. Uno de los propósitos es hacer control de calidad en la programación en SIG.
+
+```{r}
+# Opción 1: consulta sobre la tabla de atributos (la comuna 17 es un valor
+# real del campo COMUNA del shapefile; los homicidios ya traen su comuna
+# asignada desde la Parte 2)
+
+comuna_17 <- comunas %>% filter(comuna == 17)
+homicidios_comuna_17_op1 <- homicidios_urbanos %>% filter(comuna == 17)
+
+# Opción 2: intersectar espacialmente los homicidios urbanos con el polígono
+# de la comuna 13
+homicidios_comuna_17_op2 <- st_intersection(homicidios_urbanos, comuna_17)
+```
+
+Si ambas funciones producen los mismos resultados, entonces debe coincidir. Vamos a verificarlo.
+
+```{r}
+# Verificación cuantitativa: ambos métodos deben producir el mismo resultado
+cat("Opción 1 (filtro por atributo):", nrow(homicidios_comuna_17_op1), "puntos\n")
+```
+
+```{r}
+cat("Opción 2 (intersección espacial):", nrow(homicidios_comuna_17_op2), "puntos\n")
+```
+
+```{r}
+cat("¿Coinciden ambos métodos?", nrow(homicidios_comuna_17_op1) == nrow(homicidios_comuna_17_op2), "\n")
+```
+
+Si bien esta verificación coincide, se debe realizar un chequeo más exhaustivo para comprobarlo con más precisión. Pero lo dejaremos así.
+
+Gráfiquemos los resultados del filtrado.
+
+```{r}
+# Visualizar ambos resultados superpuestos
+ggplot() +
+  geom_sf(data = comunas, fill = "grey95", color = "grey40") +
+  geom_sf(data = homicidios_comuna_17_op1, aes(color = "Filtro por atributo"), shape = 1, size = 2) +
+  geom_sf(data = homicidios_comuna_17_op2, aes(color = "Intersección espacial"), shape = 4, size = 2) +
+  scale_color_manual(name = "Método", values = c("Filtro por atributo" = "blue",
+                                                  "Intersección espacial" = "darkorange")) +
+  theme_minimal()
+```
+
+En el mapa se evidencia que la intersección produce los mismos resultados. Es otra manera de hacerlo. Este método es bueno para pocos datos, donde se pueda comprobar fácilmente. El problema ocurre cuando se tengan cientos o miles de datos, allí se require un algorítmo más general.
+
+Cuando ambos enfoques coinciden en número (como aquí), la consulta por atributo suele ser más rápida; la consulta espacial es indispensable cuando no existe todavía un atributo de comuna precalculado, o cuando la geometría de referencia no coincide exactamente con la usada para asignar dicho atributo.
+
+## Calcule una tasa en lugar de un conteo absoluto:
+
+Consiga (o simule de forma documentada) una población por comuna y recalcule el mapa de la Parte 4 como casos por cada 10.000 habitantes. Compare visualmente el mapa de tasas con el de conteos absolutos de la práctica y discuta qué comunas cambian de posición relativa.
+
+La población en Cali es de 2.294.653 habitantes, con una densidad poblacional de 4.382,05 habitantes por kilómetro cuadrado. La idea de conseguir la cantidad de habitantes en cada comuna es algo que requiere de tiempo, para este ejercicio lo haremos con un enfoque más algorítmico. Para obtener el número de habitantes en cada comuna, emplearemos un enfoque híbrido que considera los siguientes aspectos:
+
+1.  **Componente Geográfico:** El tamaño o la extensión en kilómetros cuadrados debe tener algún efecto sobre el tamaño poblacional de la comuna, es por ello que el tamaño de la comuna tendrá un 60% de peso en el calculo del tamaño poblacional.
+
+2.  **Frecuencia Epidemiológica:** De la base de datos de homicidios podemos extraer la cantidad ocurrida por comuna, es por ello que asumiendo correlación entre la exposición/concentración poblacional y la frecuencia de homicidios, este será un factor que tiene el otro 40% de peso en el cálculo del tamaño poblacional.
+
+3.  **Componente Estocástico:** Generaremos un ruido aleatorio para que el modelo que genera el tamaño poblacional no sea determinístico. Esto modela las variaciones no observadas en la densidad poblacional (diferencias en tipologías de uso del suelo como zonas residenciales, comerciales e industriales) con una oscilación controlada del $\pm 15\%$
+
+El modelo que calcula los tamaños poblaciones es:
+
+$$\text{Ponderador Base}_i = \alpha \left( \frac{\text{Área}_i}{\sum \text{Área}} \right) + (1 - \alpha) \left( \frac{\text{Homicidios}_i}{\sum \text{Homicidios}} \right)$$
+
+$$\text{Índice Con Ruido}_i = \text{Ponderador Base}_i \times \text{Unif}(0.85, 1.15)$$
+
+$$\text{Población Imputada}_i = \text{Redondear} \left( \text{Población Total} \times \frac{\text{Índice Con Ruido}_i}{\sum \text{Índice Con Ruido}} \right)$$
+
+Este es un enfoque más elaborado. El siguiente código calcula los tamaños poblacionales.
+
+```{r}
+# Poblacion de Cali
+
+Poblacion_Cali <- 2294653
+
+# Obtenemos el area**2 en cada comuna
+
+comunas <- comunas |> 
+  mutate(Area = as.numeric(st_area(geometry)))
+
+# Obtenemos los homicidios por comuna
+
+homicidios_por_comuna <- homicidios_urbanos |> 
+  st_drop_geometry() |> 
+  count(comuna) |> 
+  select(comuna, n) |> 
+  rename("NumHomicidios"=n)
+
+# Haremos un join para unir el numero de homicidios con el area en cada comuna
+
+comunas <- left_join(comunas, homicidios_por_comuna, by="comuna")
+
+# Ponderacion Base
+
+## Calculamos el ponderador base asignando un 40% de importancia la
+## importancia de la cantidad de homicidios y el 60% para el area de la 
+## comuna
+
+## Luego le agreagamos un ruido aleatorio de una uniforme
+
+set.seed(12345)
+
+comunas <- comunas |> 
+  mutate(
+    Area_Prop = Area/sum(Area),
+    Homicidio_Prop = NumHomicidios/sum(NumHomicidios),
+    Pondera_base = 0.6*Area_Prop + 0.4*Homicidio_Prop) |> 
+  mutate(
+    indice_ruido = Pondera_base*runif(n(), min = 0.85, max = 1.15),
+    poblacion_imputada = round(Poblacion_Cali * (indice_ruido / sum(indice_ruido)))
+  )
+```
+
+Recordemos que la población de Cali es de: 2.294.653 habitantes.
+
+Verifiquemos que en efecto la población es cerca a ese valor:
+
+```{r}
+sum(comunas$poblacion_imputada)
+```
+
+En efecto es un valor extacto (pero no necesariamente es así, si se cambia la semilla este puede variar). Así que el método le apunta de manera correcta al tamaño de poblacional.
+
+```{r}
+resumen_por_comuna <- comunas |> 
+  mutate(Tasa_Homicidios_10000 = (NumHomicidios/poblacion_imputada)*10000) |> 
+  select(comuna, nombre, Area, NumHomicidios, poblacion_imputada, Tasa_Homicidios_10000, geometry)
+
+head(resumen_por_comuna)
+```
+
+El siguiente mapa contiene el número de homicidios en cada comuna, es claramente el mismo mapa de la práctica. Allí las comunas no son comparables porque las comunas no son homegeneas.
+
+```{r}
+#| dev: "png"
+#| dpi: 300
+
+# Visualizar el total de homicidios en un mapa de área
+
+ggplot() +
+  geom_sf(data = resumen_por_comuna, aes(fill = NumHomicidios)) +
+  scale_fill_viridis_c(name = "Casos") +
+  labs(title = "Total de homicidios por comuna") +
+  theme_minimal() +
+  theme(
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background  = element_rect(fill = "white", color = NA)
+  )
+```
+
+El siguiente mapa si refleja de manera correcta la realidad de cada comuna y se puede comparar.
+
+```{r}
+#| dev: "png"
+#| dpi: 300
+
+# Visualizar la Tasa de homicidios*10.000 por comuna
+
+ggplot(resumen_por_comuna) +
+  geom_sf(aes(fill = Tasa_Homicidios_10000)) +
+  scale_fill_viridis_c(name = "Casos") +
+  labs(title = "Tasa de homicidios*10.000 por comuna") +
+  theme_minimal() +
+  theme(
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background  = element_rect(fill = "white", color = NA)
+  )
+```
+
+Evaluar los homicidios mediante conteos absolutos genera una visión distorsionada de la seguridad ciudadana, pues confunde el volumen de eventos con el riesgo real de la población. El mapa de tasas relativas demuestra que pequeñas comunas centrales u occidentales presentan niveles de afectación proporcionalmente similares o superiores a los de las comunas más grandes del oriente. Por lo tanto, la formulación de políticas públicas de prevención e intervención policial debe basarse en el mapa de tasas para priorizar los recursos según el riesgo poblacional efectivo y no según el tamaño de la comuna.
+
+La comparación visual revela que el mapa de conteos absolutos magnifica el riesgo en el oriente de la ciudad (comunas en amarillo brillante con más de 100 homicidios) debido a su mayor densidad y extensión demográfica, mientras que el mapa de tasas por 10.000 habitantes redibuja el panorama de vulnerabilidad: la comuna de la ladera centro-occidental sufre el cambio más drástico, pasando de un azul oscuro de bajo volumen a un amarillo intenso de máxima tasa debido a su menor base poblacional, al tiempo que las comunas del centro-norte escalan de tonos morados a verde-amarillo, demostrando que el centro y la ladera presentan un riesgo individual por habitante tan o más crítico que el oriente, el cual matiza su severidad relativa al controlar el efecto del tamaño poblacional.
+
+## Compare predicados espaciales
+
+Repita la Parte 2 usando st_within() en lugar de st_intersects() dentro de st_join(). ¿Cambia el número de puntos asignados? ¿En qué casos esperaría usted que sí cambiara?
+
+Para realizar el ejercicio releemos los datasets a utilizar.
+
+```{r}
+comunas <- st_read("data/Comunas/bcs_lim_comunas_WGS84.shp", quiet = TRUE) %>%
+  rename_with(tolower) %>%
+  mutate(comuna = as.integer(comuna))
+```
+
+En la Parte 2 se empleó el siguiente código:
+
+```{r}
+homicidios_urbanos_st_intersects <- st_join(homicidios, comunas, join = st_intersects, left = FALSE)
+
+cat("Puntos dentro del área urbana (con comuna asignada) con st_intersects:", nrow(homicidios_urbanos_st_intersects),
+    "de", nrow(homicidios), "puntos válidos\n")
+```
+
+Contrastamos cambiando el argumento ***st_within***
+
+```{r}
+homicidios_urbanos_st_within <- st_join(homicidios, comunas, join = st_within, left = FALSE)
+
+cat("Puntos dentro del área urbana (con comuna asignada) con within:", nrow(homicidios_urbanos_st_within),
+    "de", nrow(homicidios), "puntos válidos\n")
+```
+
+En respuesta a la pregunta sobre si el número de puntos puede cambiar, es que sí. Pasó de `r nrow(homicidios_urbanos_st_intersects)` a `r nrow(homicidios_urbanos_st_within)`, para este caso específico el número no cambió. Pero, el número de puntos asignados sí puede disminuir con ***st_within()*** porque exige que el punto se encuentre estrictamente en el interior del polígono, a diferencia de ***st_intersects()***, que incluye cualquier punto que toque o interseque la geometría; por lo tanto, se espera que el conteo cambie principalmente cuando existen homicidios georreferenciados exactamente sobre las líneas fronterizas entre comunas o en los límites periféricos de la ciudad —los cuales son descartados por ***st_within()*** pero capturados por ***st_intersects()***— así como en casos donde los puntos en bordes compartidos generan registros duplicados al intersectar con dos comunas simultáneamente.
+
+El mapa es en escencia el mismo.
+
+```{r}
+# Visualizar el nuevo shape con eventos solo en el área urbana
+# Visualizar ambos resultados superpuestos
+ggplot() +
+  geom_sf(data = comunas, fill = "grey95", color = "grey40") +
+  geom_sf(data = homicidios_urbanos_st_intersects, aes(color = "st_intersects"), shape = 1, size = 2) +
+  geom_sf(data = homicidios_urbanos_st_within, aes(color = "st_within"), shape = 4, size = 2) +
+  scale_color_manual(name = "Método", values = c("st_intersects" = "blue",
+                                                  "st_within" = "darkorange")) +
+  theme_minimal()
+```
+
+## Shapefile forense
+
+Siguiendo el mismo camino que permitió recuperar los atributos reales de los dos shapefiles de comunas, intente conseguir el .dbf real del shapefile de homicidios (p. ej. a través del Observatorio de Seguridad de Cali o una solicitud de información pública) y compare la modalidad y edad reales contra los valores simulados usados aquí.
+
+Tras realizar una búsqueda exhaustiva en el portal de Datos Abiertos de la Alcaldía de Santiago de Cali, se evidenció que no existe un repositorio público que disponga de archivos vectoriales en formato Shapefile (`.shp` / `.dbf`) con el nivel de microdatos georreferenciados punto a punto para la violencia homicida. Si bien se identificaron conjuntos de datos oficiales sobre el tema, la totalidad de esta información se encuentra publicada exclusivamente en tablas de formato plano CSV. Además, estos registros públicos se presentan de manera altamente agregada y sumarizada por consolidación anual, lo que imposibilita la extracción de eventos individuales, sus coordenadas espaciales o sus atributos específicos por víctima. Por consiguiente, ante la imposibilidad técnica de obtener el archivo `.dbf` original vinculado al mapa de la práctica, no es factible realizar el cruce espacial registro a registro para contrastar empíricamente las distribuciones reales de edad y modalidad frente a las variables simuladas en el ejercicio.
+
+# Bibliografía
+
+- Bivand, R. (2022). R-spatial evolution: retirement of rgdal, rgeos and maptools. https://r-spatial.org/r/2022/04/12/evolution.html
+
+- geocompx (2023). Upcoming changes to popular R packages for spatial data: what you need to do. https://geocompx.org/post/2023/rgdal-retirement/
+
+- Pebesma, E., & Bivand, R. (2023). Spatial Data Science: With Applications in R. https://r-spatial.org/book/
+
+- IGAC — Instituto Geográfico Agustín Codazzi. Origen Nacional / servicio de conversión de coordenadas. https://origen.igac.gov.co/
+
+- European Petroleum Survey Group (EPSG). EPSG Geodetic Parameter Dataset. https://epsg.io/
+
+- Alcaldía de Santiago de Cali. Datos Abiertos Cali. https://datos.cali.gov.co/
+
+- Ministerio de Comercio, Industria y Turismo (2019). Metodología para la clasificación y evaluación de atractivos y recursos turísticos.

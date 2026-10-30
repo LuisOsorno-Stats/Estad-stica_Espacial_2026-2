@@ -7,6 +7,7 @@ author:
 format:
   typst:
     mainfont: "Liberation Sans"
+always_allow_html: true
 editor: visual
 ---
 
@@ -47,6 +48,8 @@ library(DT)           # Manejo o formateo de tablas en HTML
 library(sf)           # Manejo de datos vectoriales y distancias métricas
 library(knitr)        # Salidas de tablas
 library(kableExtra)   # Salidas de tablas
+library(stringi)      # Eliminar tildes en las palabras
+library(webshot2)     # Tomar capturas de los objetos HTML
 
 # geocode_OSM() (tmaptools) usa internamente utils::download.file(), que en
 # algunas redes con proxy o inspección SSL falla con el mensaje "no fue
@@ -138,11 +141,11 @@ geocode_OSM_punto_seguro <- function(q, ...) {
 
 Antes de realizar la geocodificación, es importante tener en cuenta algunos aspectos que pueden ayudar en la precisión de la geocodificación:
 
-- **Estandarización de direcciones:** Los procesos de geocodificación funcionan mejor cuando las direcciones están en un formato más limpio, evitar usar abreviaturas inconsistentes (*KR* vs. *CR* vs. *Cra.*), símbolos extraños (*\#*, *Nro*, $\bf{N^\circ}$) o cualquier tipo de almohadilla, hacen que las direcciones no se geocodifiquen correctamente.
+- **Estandarización de direcciones:** Los procesos de geocodificación funcionan mejor cuando las direcciones están en un formato más limpio, evitar usar abreviaturas inconsistentes (*KR* vs. *CR* vs. *Cra.*), símbolos extraños (*\#*, *Nro*, $N^\circ$) o cualquier tipo de almohadilla, hacen que las direcciones no se geocodifiquen correctamente.
 
 - **Precisión y calidad del resultado:** Aunque el proceso de geocodificación consiste en obtener un par de coordenadas, el proceso no es tan simple, porque buscar un punto en el espacio es muy complejo. Es importante hacer una revisión de qué tan confiable es el resultado, qué tan símil es, qué tan preciso fue. Por ello, la función ***tidygeocoder::geo()***, permite hacer una inspección de campos adicionales y así verificar de manera más activa el resultado.
 
-- **Límites de uso (rate limits) y atribución:** El servicio obtenido por Nominatim de OpenStreetMap que se emplea en las funciones ***geocode_OSM()*** y ***geo(method = "osm")***, tiene un límite de uso, que es una solicitud por minuto; por ello si se requieren procesar grandes volúmenes de datos se debe usar un proveedor comercial (pagando). Además, el servicio gratuito exige o pide atribución en cualquier mapa o elemento publicado, en el que se hayan empleado servicios de geocodificación. 
+- **Límites de uso (rate limits) y atribución:** El servicio obtenido por Nominatim de OpenStreetMap que se emplea en las funciones ***geocode_OSM()*** y ***geo(method = "osm")***, tiene un límite de uso, que es una solicitud por minuto; por ello si se requieren procesar grandes volúmenes de datos se debe usar un proveedor comercial (pagando). Además, el servicio gratuito exige o pide atribución en cualquier mapa o elemento publicado, en el que se hayan empleado servicios de geocodificación.
 
 - **Cobertura geográfica del servicio:** No todos los motores de geocodificación tienen cobertura mundial, si se quiere hacer un mapa espacial y se requiere geocodificar en todos los países, los diferentes motores tienen limitaciones en ese aspecto. Por ejemplo, el método *census* de **tidygeocoder** solo codifica en Estados Unidos. Para Colombia, los que funcionan relativamente bien son los métodos *osm* (Nominatim) y *arcgis*.
 
@@ -169,6 +172,7 @@ Encontremos un lugar en la ciudad, por ejemplo la Universidad Nacional de Colomb
 tm2 <- geocode_OSM_punto_seguro("Universidad Nacional de Colombia, Medellin, Colombia")
 tm2
 ```
+
 Allí, obtenemos las coordenadas. Latitud y longitud
 
 En vez de buscar un lugar o geocodificarlo usando una descripción de él, lo buscamos dando la dirección, obtenemos:
@@ -214,10 +218,9 @@ print(td3)
 
 Como se mencionó al comienzo, un motor como *census* es gratuito, pero solo geocodifica en Estados Unidos, lo cual es una limitación para datos de otros países, pero es una buena herramienta.
 
-Los motores de *google*, *mapbox*, *here*, *opencage*, *geocodio*, entre otros, requieren usar llaves de APIs, lo que implica un costo para el proceos de geocodificación. 
+Los motores de *google*, *mapbox*, *here*, *opencage*, *geocodio*, entre otros, requieren usar llaves de APIs, lo que implica un costo para el proceos de geocodificación.
 
 Las versiones gratuitas *osm* y *arcgis*, que hemos explorado son relativamente buenas para los procesos que requerimos.
-
 
 ## Visualización con leaflet
 
@@ -245,11 +248,9 @@ leaflet() %>%
                    color = 'red', radius = 30, popup = 'Parque Explora')
 ```
 
-
 # Comparación cuantitativa de motores de geocodificación
 
-Hemos explorado algunas de las ideas básicas en la geocodificación con dos funciones, comparaciones simples y descriptivas, basadas en los output de las funciones. Ahora vamos a hacer algo más elaborado, con las 20 direcciones de lugares en la ciudad. La idea es cuantificar qué tanto difieren los motores en la geocodificación, realmente no se puede establecer cuál lo hace mejor porque no tenemos las coordenadas exactas como punto de referencia. 
-
+Hemos explorado algunas de las ideas básicas en la geocodificación con dos funciones, comparaciones simples y descriptivas, basadas en los output de las funciones. Ahora vamos a hacer algo más elaborado, con las 20 direcciones de lugares en la ciudad. La idea es cuantificar qué tanto difieren los motores en la geocodificación, realmente no se puede establecer cuál lo hace mejor porque no tenemos las coordenadas exactas como punto de referencia.
 
 ## Lectura y estandarización de direcciones
 
@@ -273,12 +274,11 @@ dir
 
 Como observación, si este paso no se ejecuta de manera correcta en la geocodificación, entonces se volverá a él.
 
-
 ## Geocodificación con los tres enfoques
 
 Recordemos que la idea es hacer una comparación entre los tres métodos de geocodificación que tenemos disponibles:
 
-- El primero manera será con la función ***geocode_OSM *** y el método *OSM* de OpenStreetMap Nominatim.
+- El primero manera será con la función ***geocode_OSM*** y el método *OSM* de OpenStreetMap Nominatim.
 
 - El segundo es usar la función ***geo()*** y nuevamente el método *OSM*
 
@@ -294,7 +294,6 @@ geo_osm <- geocodificar_seguro(dir, method = "osm") %>%
 geo_arcgis <- geocodificar_seguro(dir, method = "arcgis") %>%
   transmute(direccion = address, lat_arcgis = lat, long_arcgis = long)
 ```
-
 
 ## ¿Qué tan de acuerdo están los tres métodos? Distancias en metros
 
@@ -353,10 +352,9 @@ comparacion %>%
 
 Los resultados muestran que el lugar donde termina ubicada una dirección cambia bastante según la herramienta que se usa Cuando se comparan dos formas de usar OpenStreetMap, muchas direcciones caen exactamente en el mismo punto, pero en otras hay diferencias de unos cientos de metros porque cada paquete le consulta a la plataforma de una manera distinta. La diferencia media más grande aparece al comparar OpenStreetMap en *tmap* contra *ArcGIS*: ahí las direcciones se alejan casi dos kilómetros en promedio y algunas terminan a casi $10\text{ km}$ de distancia. Además, en todos los casos la mayoría de los puntos quedan cerca, pero unos pocos errores gigantescos hacen que la distancia promedio se dispare.
 
-
 ## Mapa comparativo
 
-El siguiente mapa ilustra la comparación que se está realizando. Se insiste en que no hay una manera de determinar con cierta precisión qué motor de geocodificación es mejor. Es claro en el mapa que existen direcciones que se geocodifican con más precisión que otras. 
+El siguiente mapa ilustra la comparación que se está realizando. Se insiste en que no hay una manera de determinar con cierta precisión qué motor de geocodificación es mejor. Es claro en el mapa que existen direcciones que se geocodifican con más precisión que otras.
 
 ```{r}
 leaflet(comparacion) %>%
@@ -377,19 +375,734 @@ leaflet(comparacion) %>%
             title = "Motor de geocodificación")
 ```
 
-
 # Geocodificación inversa como control de calidad
 
+Los procesos que hemos realizado anteriormente, codifican lugares que tienen asociados una dirección, un atributo, una descripción, lo llevan a unas coordenadas de latitud y longitud. La geocodificación inversa, consiste en lo contrario, tomar unas coordenadas expresadas en longitud y latitud; las lleva a una dirección, un atriuto del lugar, el nombre de una calle o un parque, un código postal, entre otros. Este procedimiento puede ser valioso en ciertos contexto, pero nuestro enfoque será evaluar la calidad de coordendas en una base de datos. Veamos un ejemplo con una base de datos de las viviendas en Cali. **Datos_Vivienda.xlsx**.
 
+```{r}
+vivienda <- read_excel('Datos/Datos_Vivienda.xlsx', sheet = "Datos Vivienda") %>%
+  as_tibble() %>%
+  clean_names() %>%
+  rename(longitud = cordenada_longitud, latitud = cordenada_latitud) %>%
+  filter(!is.na(longitud), !is.na(latitud))
 
+dim(vivienda)
+```
 
+Veamos que el dataset, tiene 8319 registros con 12 características, atributos o variables.
 
+```{r}
+set.seed(2026)
+muestra_rev <- vivienda %>% slice_sample(n = 20)
 
+rev_geo <- reverse_geocodificar_seguro(lat = muestra_rev$latitud,
+                                        long = muestra_rev$longitud,
+                                        method = "osm",
+                                        full_results = TRUE) %>%
+  as_tibble()
 
+names(rev_geo)
+```
 
+Luego de la geocodificación inversa, podemos ver algunas de las variables que retorna la función. Entre ellas, la latitud, longitud (las cuales no son de much interés), una dirección. ciudad, país, la dirreción, entre otras. Todas estas características son valiosas porque precisamente son elementos que buscan.
 
+```{r}
+rev_geo %>%
+  select(any_of(c("address", "city", "country")))
+```
 
+El resultado de Nominatim incluye, entre otros, los campos city y/o country, según la subdivisión administrativa del punto. Verificamos cuántos puntos de la muestra fueron efectivamente ubicados en Cali:
 
+```{r}
+campos_lugar <- c("lat", "long", "address", "city", "country")
+control_calidad <- muestra_rev %>%
+  bind_cols(rev_geo %>% select(any_of(campos_lugar)))
 
+# Nos apoyamos en cualquiera de los campos administrativos disponibles
+# (Nominatim no siempre devuelve exactamente las mismas columnas)
+campos_disponibles <- intersect(c("city", "town", "municipality", "country"), names(control_calidad))
 
+if (length(campos_disponibles) == 0) {
+  message("El servicio de geocodificación inversa no estuvo disponible en esta sesión; ",
+          "no es posible verificar el municipio en este momento.")
+} else {
+  control_calidad %>%
+    mutate(en_cali = if_any(all_of(campos_disponibles),
+                             ~ str_detect(str_to_lower(coalesce(., "")), "cali"))) %>%
+    count(en_cali)
+}
+```
 
+Si sale en_cali == FALSE no siempre hay un error: puede ser un municipio vecino o una imprecisión del mapa en zonas rurales. La ventaja es que esto nos ayuda a saber exactamente qué revisar a mano, ahorrándonos el trabajo de mirar 8.322 filas a ojo.
+
+# Ingeniería de variables espaciales: distancia a un punto de referencia
+
+Usar coordenadas para calcular distancias a puntos importantes (como estaciones, centros comerciales, estaciones de policia, hospitales, universidades, entre otros) es una idea fundamental en los modelos espaciales. Básicamente, así es como se construyen: se juntan las ubicaciones con lo que hay alrededor para que el modelo aprenda cómo la cercanía a estos sitios influye en el resultado. Por ejemplo, para predecir cuánto cuesta una vivienda usando solo sus características básicas (metros cuadrados, número de habitaciones y baños), el modelo se quedaría corto porque ignora algo crucial: la ubicación.
+
+En la misma base de datos que hemos explorado sobre las viviendas en Cali **Datos_Vivienda.xlsx**, la segunda hoja contiene información sobre multicentros con un pequeño conjunto adicional de 27 inmuebles del sector “Multicentro” en Cali. El objetivo será usarla con dos propósitos:
+
+- Ejercicio de lectura de un libro de Excel con varias hojas
+
+- Construir, a partir de su centroide, un punto de referencia geográfico frente al cual mediremos la distancia de cada inmueble de la base principal.
+
+```{r}
+excel_sheets('Datos/Datos_Vivienda.xlsx')
+```
+
+Con la instrucción anterior, verificamos que el dataset "Datos Vivienda" en efecto contiene la hoja llamada "multicentro". Ahora, procedemos a leerla:
+
+```{r}
+multicentro <- read_excel('Datos/Datos_Vivienda.xlsx', sheet = "multicentro") %>%
+  clean_names() %>%
+  rename(longitud = cordenada_longitud, latitud = cordenada_latitud) %>%
+  filter(!is.na(longitud), !is.na(latitud))
+
+dim(multicentro)
+```
+
+El conjunto de datos, posee 27 registros y 12 variables.
+
+Para realizar el ejercicio, calcularemos el centroide de los datos y ese será el punto de referencia.
+
+```{r}
+# Punto de referencia: centroide del sector Multicentro
+
+ref_multicentro <- tibble(longitud = mean(multicentro$longitud),
+                           latitud  = mean(multicentro$latitud))
+ref_multicentro
+```
+
+Calculamos la distancia (en metros) de cada inmueble de la base principal al punto de referencia:
+
+```{r}
+vivienda_sf <- st_as_sf(vivienda, coords = c("longitud", "latitud"),
+                         crs = 4326, remove = FALSE) %>%
+  st_transform(32618)
+
+ref_sf <- st_as_sf(ref_multicentro, coords = c("longitud", "latitud"),
+                    crs = 4326) %>%
+  st_transform(32618)
+
+vivienda <- vivienda %>%
+  mutate(dist_multicentro_m = as.numeric(st_distance(vivienda_sf, ref_sf)))
+
+vivienda %>%
+  select(zona, barrio, estrato, precio_millon, dist_multicentro_m) %>%
+  summary()
+```
+
+El resumen muestra una base de 8319 inmuebles distribuidos en 5 zonas y 436 barrios, concentrándose principalmente en sectores de clase media-alta a alta (estratos 4 y 5, con una media de 4,6). Los precios de las viviendas varían considerablemente, partiendo desde los 58 millones hasta un valor máximo de 1.999 millones de pesos, fijando el valor típico (mediana) en 330 millones. En cuanto a la localización, las propiedades se encuentran a una distancia promedio de unos 5 kilómetros del centro comercial Unicentro (Multicentro), abarcando desde opciones muy cercanas a solo 53 metros hasta inmuebles periféricos situados a casi 13 kilómetros de distancia.
+
+¿Existe alguna relación entre la distancia al sector Multicentro y el precio o el estrato? Una exploración rápida:
+
+```{r}
+ggplot(vivienda, aes(x = dist_multicentro_m / 1000, y = precio_millon)) +
+  geom_point(alpha = 0.15, color = "steelblue") +
+  geom_smooth(method = "loess", se = FALSE, color = "darkred") +
+  labs(x = "Distancia al sector Multicentro (km)",
+       y = "Precio (millones de COP)",
+       title = "Precio de vivienda vs. distancia a un punto de referencia") +
+  theme_minimal()
+```
+
+El gráfico muestra una curva rara porque el "punto de referencia" en el mapa se puso de forma artificial (creado a partir de los puntos en la base de datos) y no porque la ciudad realmente funcione alrededor de él. Por eso, las casas más caras no están justo encima de ese punto, sino a unos 5 kilómetros, que es donde realmente quedan los barrios acomodados. Conforme a que se aleja más de 8 o 10 kilómetros, el precio cae porque ya se sale hacia la orilla de la ciudad. En resumen, como ese punto se marcó "a dedo", la distancia por sí sola no nos dice si una casa es cara o barata, y por eso hay que combinarla con datos como el estrato o el tamaño para no sacar conclusiones falsas.
+
+# Visualización avanzada de datos de vivienda en Cali
+
+Ahora vamos a seguir utilizando la base de datos de viviendas en Cali, con el objetivo de construir un mapa más informativo, este será coloreado por estrato y se agruparán los punto para una mejor visualización.
+
+```{r}
+set.seed(2026)
+datos <- vivienda %>% filter(!is.na(estrato)) %>% slice_sample(n = 500)
+
+pal_estrato <- colorFactor(palette = "YlOrRd", domain = datos$estrato)
+
+leaflet(datos) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addCircleMarkers(lng = ~longitud, lat = ~latitud,
+                    color = ~pal_estrato(estrato),
+                    radius = 5, stroke = FALSE, fillOpacity = 0.7,
+                    popup = ~paste0("<b>Barrio:</b> ", barrio,
+                                     "<br><b>Estrato:</b> ", estrato,
+                                     "<br><b>Precio:</b> $", precio_millon, " millones")) %>%
+  addLegend("bottomright", pal = pal_estrato, values = ~estrato, title = "Estrato")
+```
+
+Con la función ***markerClusterOptions()***, agrupamos los puntos basados en la localización más cerca, es una idea similar a lo que se realizaba en los poligonos de Thiessen.
+
+```{r}
+leaflet(datos) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addMarkers(lng = ~longitud, lat = ~latitud,
+             clusterOptions = markerClusterOptions())
+```
+
+# Georreferenciación institucional: hospitales ESE de Antioquia
+
+## Contexto y fuente de datos
+
+Esta base de datos reúne la ubicación exacta de los hospitales públicos de Antioquia (las E.S.E.). Lo práctico de este ejercicio es que los datos no se descargaron a mano, sino que el sistema se conecta en automático al portal de Datos Abiertos de Colombia. De esta forma, siempre estamos trabajando con la información más reciente y actualizada.
+
+```{r}
+url_hosp <- "https://www.datos.gov.co/resource/pi36-fdpk.json?$limit=5000"
+
+hosp_raw <- fromJSON(url_hosp, flatten = TRUE) %>% as_tibble() %>% clean_names()
+
+names(hosp_raw)
+```
+
+## Organización de la base de datos
+
+Sacamos la ubicación exacta que venía guardada dentro del texto, nos quedamos solo con los municipios del Valle de Aburrá y arreglamos las direcciones para que queden limpias y bien organizadas, usando el mismo método que en el archivo **DireccionesGeo.xlsx**.
+
+```{r}
+hosp_ant <- hosp_raw %>%
+  mutate(lat_oficial  = as.numeric(punto_latitude),
+         long_oficial = as.numeric(punto_longitude)) %>%
+  filter(nombre_regi_n == "Valle de Aburrá") %>%
+  select(nombre_municipio, nombre_sede, direccion = direcci_n,
+         lat_oficial, long_oficial) %>%
+  filter(!is.na(lat_oficial), !is.na(long_oficial))
+
+dim(hosp_ant)
+```
+
+Obtenemos que para el Valle de Aburrá existen 16 registros. De los cuales los siguientes son los municipios en cuestión:
+
+```{r}
+head(hosp_ant)
+```
+
+Realizamos un proceso de limpieza en las direcciones, con el objetivo de estadarizarlos.
+
+```{r}
+# Estandarización de las direcciones para su correcta lectura por el geocodificador
+
+address_std <- hosp_ant$direccion %>%
+  str_replace(., "KR", "CR") %>%
+  str_replace(., "CARRERA", "CR") %>%
+  str_replace(., "CR", "Cra.") %>%
+  str_replace(., "N°", "") %>%
+  str_replace(., "Nº", "") %>%
+  str_replace(., "#", "") %>%
+  str_replace(., " - ", "-")
+
+# Estandarización del nombre del municipio y construcción de la consulta
+
+municipio_std <- hosp_ant$nombre_municipio %>%
+  toupper() %>%
+  chartr("ÁÉÍÓÚ", "AEIOU", .) %>%
+  chartr("Ü", "U", .) %>%
+  str_to_lower()
+
+hosp_ant <- hosp_ant %>%
+  mutate(query = paste(address_std, ",", municipio_std, ", Colombia"))
+
+hosp_ant %>% select(nombre_sede, query) %>% head()
+```
+
+Claramente vemos que las direcciones quedaron correctamente estandarizadas.
+
+## Geocodificación y comparación frente a las coordenadas oficiales
+
+La idea del siguiente ejercicio es comparar la geocodificación que se realiza con el método *argis* y la coordenada exacta. Nuevamente para comparar en metros la diferencia entre los real y lo geocodificado.
+
+```{r}
+hosp_geo <- geocodificar_seguro(hosp_ant$query, method = "arcgis") %>%
+  transmute(query = address, lat_geo = lat, long_geo = long)
+
+hosp_ant <- hosp_ant %>% left_join(hosp_geo, by = "query")
+```
+
+Verificamos cuántos se geocodifican correctamente.
+
+```{r}
+hosp_ant <- hosp_ant %>%
+  mutate(encontrado = if_else(!is.na(lat_geo) & !is.na(long_geo),
+                               "Encontrado", "No encontrado") %>% as.factor())
+
+hosp_ant %>% count(encontrado)
+```
+
+En efecto, los q6 hospitales se geocodificaron exitosamente, ahora compararemos qué tan preciso es:
+
+```{r}
+hosp_dist <- hosp_ant %>% filter(encontrado == "Encontrado")
+
+oficial_sf <- st_as_sf(hosp_dist, coords = c("long_oficial", "lat_oficial"), crs = 4326)
+geo_sf     <- st_as_sf(hosp_dist, coords = c("long_geo", "lat_geo"), crs = 4326)
+
+hosp_dist$distancia_m <- as.numeric(
+  st_distance(st_transform(oficial_sf, 32618),
+              st_transform(geo_sf, 32618),
+              by_element = TRUE)
+)
+
+hosp_dist %>%
+  select(nombre_sede, nombre_municipio, distancia_m) %>%
+  arrange(desc(distancia_m))
+```
+
+```{r}
+summary(hosp_dist$distancia_m)
+```
+
+De allí observamos que la mejor geocodificación tuvo un error de aproximadamente 13 metros; el error medio fue de un poco más de 337 metros, el cual es grande, porque representa un tercio de kilómetro; la peor geocodificación fue de 2708 metros aproximadamente, es muy mala y es un error de precisión muy alto.
+
+## Mapa: sedes encontradas vs. no encontradas
+
+El siguiente mapa muestra los hospitales encontrados y que se pudieron geocodificar.
+
+```{r}
+pal <- colorFactor(palette = c('blue', 'red'), domain = hosp_ant$encontrado,
+                    levels = c("Encontrado", "No encontrado"))
+
+hosp_ant %>%
+  st_as_sf(coords = c("long_oficial", "lat_oficial"), crs = 4326, remove = FALSE) %>%
+  leaflet() %>%
+  addTiles() %>%
+  addProviderTiles(providers$CartoDB.VoyagerLabelsUnder) %>%
+  addCircleMarkers(radius = 6, weight = 1, color = ~pal(encontrado),
+                    popup = ~paste0(nombre_sede, " (", nombre_municipio, ")")) %>%
+  addLegend("bottomright", pal = pal, values = ~encontrado,
+            title = "Resultado de la geocodificación")
+```
+
+## Nota sobre GeoMedellín
+
+Medellín cuenta con el portal GeoMedellín, un sistema de información geográfica oficial donde la Alcaldía centraliza sus mapas y datos. En este portal solía existir una herramienta muy práctica que permitía subir un archivo de Excel con varias direcciones para obtener sus coordenadas en el mapa de forma automática. Sin embargo, las páginas institucionales cambian de diseño constantemente, renuevan sus aplicaciones o simplemente mueven las herramientas de lugar. Si al momento de hacer este ejercicio esa opción ya no se encuentra disponible o cambió de nombre, pueden buscar directamente en el buscador de GeoMedellín. De todas formas, la mejor alternativa es aprender el método que enseñamos aquí con R: un flujo de trabajo automático que no depende de si la página web de la Alcaldía está funcionando o no, garantizando que siempre puedan georreferenciar sus datos sin contratiempos.
+
+# Buenas prácticas, atribución y reproducibilidad
+
+- Derechos de autor (**Atribución**): Los datos del mapa vienen de OpenStreetMap/Nominatim y requieren darles crédito. No hay que preocuparse demasiado por esto, ya que la función addTiles() de R escribe automáticamente la nota correspondiente al pie del mapa.
+
+- **Reglas** de uso: La herramienta que usamos (Nominatim) pide respetar sus condiciones: hacer máximo una consulta por segundo, no abusar del servicio con volúmenes masivos o comerciales sin permiso, e identificar siempre la aplicación que hace la petición.
+
+- Protección de datos (**Privacidad**): Aunque en este ejercicio trabajamos con inmuebles y hospitales, recuerden que si manejan direcciones de residencias de personas, esa información es un dato personal protegido en Colombia por la Ley 1581 de 2012.
+
+- **Guardado de datos** (Caché): Para evitar consultar la API una y otra vez cada que compilen el documento, es muy buena práctica guardar los resultados en un archivo local (como cache_geo.rds) y hacer que el código solo consulte internet si dicho archivo no existe.
+
+- Resultados idénticos (**Reproducibilidad**): Cuando seleccionen datos al azar, usen siempre la orden set.seed(). Esto asegura que las muestras sean exactamente iguales cada vez que ejecuten el código.
+
+# Ejercicios propuestos
+
+Entregable sugerido: un documento Quarto renderizado (.html), con el código visible, que incluya la solución de los cinco ejercicios y no más de una página de discusión por ejercicio. Se evaluará la correcta manipulación de los datos, la validez estadística/espacial del análisis (uso apropiado de un sistema de coordenadas proyectado para distancias) y la claridad de las conclusiones.
+
+## Estandarización de direcciones
+
+Tomen las 19 direcciones de DireccionesGeo.xlsx y propongan una función de estandarización más completa que la usada en Sección 5 (por ejemplo, manejar sufijos como A, B, Sur, Este). Vuelvan a geocodificar con geo(method = "osm") y reporten si la tasa de discrepancia frente a arcgis disminuyó.
+
+```{r}
+# Leemos las direcciones
+
+direcciones <- read_xlsx("Datos/DireccionesMedellin.xlsx")
+```
+
+```{r}
+# Mostramos el encabezado
+
+head(direcciones)
+```
+
+```{r}
+# Realizamos la depuracion
+
+direccion_stand <- direcciones$DIRECCCION %>% 
+  str_replace(.,"Cra", "Cra.")  %>%
+  str_replace(., "#", "")  %>%
+  str_replace(., " - ", "-")
+
+ciudad_stand <- direcciones$CIUDAD  %>%
+  toupper()  %>% 
+  chartr("ÁÉÍÓÚ", "AEIOU", .)  %>%
+  str_to_lower()
+
+pais_stand <- direcciones$PAIS  %>%
+  toupper()  %>%
+  str_replace(., "ÁÉÍÓÚ", "AEIOU")  %>%
+  tolower()
+
+direcciones <- direcciones  %>% 
+  mutate(
+    DIRECCCION = direccion_stand,
+    CIUDAD = ciudad_stand,
+    PAIS = pais_stand
+    )
+```
+
+```{r}
+# Mostramos la base de datos limpia
+
+head(direcciones)
+```
+
+```{r}
+# Pegamos la direccion con la ciudad y el pais
+
+dir_code <- with(direcciones, paste(DIRECCCION, CIUDAD, PAIS, sep = ', '))
+
+dir_code
+```
+
+```{r}
+# Implementamos la geocodificacion con geo(method = "osm")
+
+geo_osm_direcciones <- geocodificar_seguro(dir_code, method = "osm") %>%
+  transmute(direccion = address, lat_osm = lat, long_osm = long)
+
+# Implementamos la geocodificacion con geo(method = "argis")
+
+geo_arcgis_direcciones <- geocodificar_seguro(dir_code, method = "arcgis") %>%
+  transmute(direccion = address, lat_arcgis = lat, long_arcgis = long)
+
+# Implementamos la geocodificacion con geo(method = "argis")
+
+osm_tmaptools_direcciones <- geocode_OSM_seguro(dir_code) %>%
+  transmute(direccion = query, lat_tmap = lat, long_tmap = lon)
+```
+
+```{r}
+dist_m <- function(lat1, long1, lat2, long2) {
+  # Robusta a NA: si un proveedor no estuvo disponible en la red del usuario,
+  # las filas correspondientes simplemente quedan en NA en lugar de fallar.
+  out <- rep(NA_real_, length(lat1))
+  ok <- stats::complete.cases(lat1, long1, lat2, long2)
+  if (any(ok)) {
+    p1 <- st_as_sf(tibble(long1 = long1[ok], lat1 = lat1[ok]),
+                    coords = c("long1", "lat1"), crs = 4326)
+    p2 <- st_as_sf(tibble(long2 = long2[ok], lat2 = lat2[ok]),
+                    coords = c("long2", "lat2"), crs = 4326)
+    out[ok] <- as.numeric(st_distance(st_transform(p1, 32618),
+                                       st_transform(p2, 32618),
+                                       by_element = TRUE))
+  }
+  out
+}
+
+comparacion_direcciones <- osm_tmaptools_direcciones %>%
+  left_join(geo_osm_direcciones, by = "direccion") %>%
+  left_join(geo_arcgis_direcciones, by = "direccion")
+
+comparacion_direcciones <- comparacion_direcciones %>%
+  mutate(
+    d_tmap_osm    = dist_m(lat_tmap, long_tmap, lat_osm, long_osm),
+    d_osm_arcgis  = dist_m(lat_osm, long_osm, lat_arcgis, long_arcgis),
+    d_tmap_arcgis = dist_m(lat_tmap, long_tmap, lat_arcgis, long_arcgis)
+  )
+
+comparacion_direcciones %>%
+  select(direccion, starts_with("d_"))
+```
+
+La tabla anterior muestra la diferencia en metros de la geocodificación. Veamos un resumen para *Argis* vs *OSM*
+
+```{r}
+summary(comparacion_direcciones$d_osm_arcgis)
+```
+
+Al aplicar la nueva función de estandarización sobre las 19 direcciones y volver a geocodificar con OpenStreetMap (method = "osm"), las distancias de diferencia con respecto a las coordenadas de referencia de ArcGIS muestran una mediana de 4,21 km y un promedio de 3,90 km (3.899,5 metros). La menor diferencia registrada fue de tan solo 54,16 metros, mientras que el caso con mayor desvío alcanzó los 9,41 kilómetros.
+
+Los resultados siguen siendo igual de malos que anteriormente.
+
+## Umbral de acuerdo
+
+Usando la tabla de distancias de Sección 5, calculen el porcentaje de direcciones para las cuales los tres motores concuerdan dentro de un radio de 100 metros. Discutan qué umbral sería razonable para una aplicación de reparto a domicilio frente a uno de análisis urbano agregado por barrio.
+
+```{r}
+head(comparacion_direcciones)
+```
+
+```{r}
+concordancia_left_100m <- comparacion_direcciones |> 
+  summarise(
+    total = n(),
+    dist_left_100 = sum(d_tmap_osm <= 100 & d_osm_arcgis <= 100 & d_tmap_arcgis<=100),
+    proporcion = paste(dist_left_100/total*100, "%")
+    )
+concordancia_left_100m
+```
+
+Solo en el 10$\%$ de las direcciones los tres motores concuerdan o aciertan, en que la distancia real y la geocodificada es menor a 100 metros. Realmente es un valor muy bajo, porque estos sistemas o implementar algoritmos basados en esta geocodificación tendría una gran imprecisión.
+
+Para una aplicación de reparto a domicilio (delivery), un umbral adecuado debe ser muy exigente, idealmente de 20 a 50 metros (máximo 100 m), ya que una diferencia mayor significaría enviar al repartidor a una manzana equivocada, al otro lado de una avenida o a un conjunto vecino, afectando directamente la entrega. En cambio, para un análisis urbano agregado por barrio, un umbral de 300 a 500 metros (e incluso hasta 1 kilómetro) resulta suficiente y razonable, puesto que el objetivo no es llegar a la puerta exacta de la vivienda, sino agrupar los datos para entender tendencias socioeconómicas o de cobertura a nivel sectorial,
+
+## Auditoría por geocodificación inversa.
+
+Repitan el ejercicio de Sección 6 con una muestra de 100 inmuebles (en lugar de 20) y con method = "arcgis". Comparen la proporción de coincidencias con Cali frente al resultado obtenido con Nominatim.
+
+```{r}
+# Se vuelve a cargar el dataset
+
+vivienda <- read_excel('Datos/Datos_Vivienda.xlsx', sheet = "Datos Vivienda") %>%
+  as_tibble() %>%
+  clean_names() %>%
+  rename(longitud = cordenada_longitud, latitud = cordenada_latitud) %>%
+  filter(!is.na(longitud), !is.na(latitud))
+```
+
+```{r}
+set.seed(2026)
+muestra_rev <- vivienda %>% slice_sample(n = 100)
+
+rev_geo_100 <- reverse_geocodificar_seguro(lat = muestra_rev$latitud,
+                                        long = muestra_rev$longitud,
+                                        method = "arcgis",
+                                        full_results = TRUE) %>%
+  as_tibble()
+
+verificar_si_es_cali <- rev_geo_100 |>
+  summarise(
+    total = n(),
+    check = sum(City == "Cali"),
+    proporcion = paste(check/total*100, "%")
+  )
+
+verificar_si_es_cali
+```
+
+En efecto el $100\%$ de las geocodificaciones inversas se encuentran en Cali. Las proporciones son iguales y ambos métodos proporcionan geocodificaciones inversas que al menos están en Cali, ya la precisión de ellas es otro cuento.
+
+## Nuevo punto de referencia
+
+Geocodifiquen el centro histórico de Cali (por ejemplo, “Plaza de Cayzedo, Cali, Colombia”) y repitan el análisis de Sección 7 usando ese punto en lugar del centroide de Multicentro. Comparen los patrones obtenidos.
+
+```{r}
+plaza_cayzedo <- geocode_OSM_punto_seguro("Plaza de Cayzedo, Cali, Colombia")
+plaza_cayzedo <- cbind(longitud = plaza_cayzedo$coords["x"],
+                       latitud=plaza_cayzedo$coords["y"]) |>
+  as.data.frame()
+
+plaza_cayzedo
+```
+
+Usando la función ***geocode_OSM_punto_seguro()***, geocodificamos la Plaza de Cayzedo, en Cali como centroide.
+
+Volvemos a leer la base de datos de viviendas en Cali.
+
+```{r}
+# Leemos los datos de vivienda en Cali
+
+vivienda <- read_excel('Datos/Datos_Vivienda.xlsx', sheet = "Datos Vivienda") |> 
+  clean_names() %>%
+  rename(longitud = cordenada_longitud, latitud = cordenada_latitud) %>%
+  filter(!is.na(longitud), !is.na(latitud))
+```
+
+Ahora calculamos la distancia desde la Plaza de Cayzedo hasta cada uno de los multicentros.
+
+```{r}
+# 1. Filtramos los NA en 'vivienda' y convertimos a SF
+vivienda_sf <- vivienda %>% 
+  filter(!is.na(longitud), !is.na(latitud)) %>% 
+  st_as_sf(coords = c("longitud", "latitud"), crs = 4326, remove = FALSE) %>% 
+  st_transform(32618)
+
+# 2. Filtramos los NA en 'plaza_cayzedo' y convertimos a SF
+plaza_cayzedo_sf <- plaza_cayzedo %>% 
+  filter(!is.na(longitud), !is.na(latitud)) %>% 
+  st_as_sf(coords = c("longitud", "latitud"), crs = 4326) %>% 
+  st_transform(32618)
+
+# 3. Calculamos la distancia usando 'vivienda_sf' para mantener consistencia de filas
+vivienda_clean <- vivienda %>% 
+  filter(!is.na(longitud), !is.na(latitud)) %>% 
+  mutate(dist_multicentro_m = as.numeric(st_distance(vivienda_sf, plaza_cayzedo_sf)))
+
+# 4. Generamos el resumen
+vivienda_clean %>% 
+  select(zona, barrio, estrato, precio_millon, dist_multicentro_m) %>% 
+  summary()
+```
+
+```{r}
+ggplot(vivienda_clean, aes(x = dist_multicentro_m / 1000, y = precio_millon)) +
+  geom_point(alpha = 0.15, color = "steelblue") +
+  geom_smooth(method = "loess", se = FALSE, color = "darkred") +
+  labs(x = "Distancia a la Plaza de Cayzedo (km)",
+       y = "Precio (millones de COP)",
+       title = "Precio de vivienda vs. distancia a la Plaza de Cayzedo") +
+  theme_minimal()
+```
+
+El gráfico muestra una curva en forma de "U" que deja ver algo muy claro: estar cerca del centro histórico de Cali (Plaza de Cayzedo) no significa tener la vivienda más cara. En los primeros kilómetros, cerca del centro, las casas tienen un precio medio, pero al alejarse hacia la zona media de la ciudad (entre los 4 y 7 kilómetros) los precios caen a su punto más bajo. Sin embargo, a partir de los 8 o 10 kilómetros la tendencia se dispara hacia arriba y aparecen las propiedades más costosas. Esto demuestra que en Cali el mercado de lujo se movió hacia las afueras (como las zonas exclusivas del sur o del oeste).
+
+## Calidad de la geocodificación institucional.
+
+Con los resultados de Sección 9, identifiquen si los municipios con mayor distancia promedio entre la coordenada oficial y la geocodificada comparten alguna característica (ruralidad, tamaño del municipio, calidad de la nomenclatura vial). Redacten un párrafo de máximo 200 palabras con su hipótesis y una gráfica de soporte.
+
+### Se cargan los datos
+
+Primero carguemos nuevamente los datos:
+
+```{r}
+url <- "https://www.datos.gov.co/resource/pi36-fdpk.json?$limit=5000"
+
+hospitales <- fromJSON(url, flatten = TRUE) %>% as_tibble() %>% clean_names()
+```
+
+Revisemos el encabezado de la base de datos:
+
+```{r}
+head(hospitales)
+```
+
+En la base de datos se observan problemas con la forma en que están dadas las direcciones. Hay problemas en que no están estandarizadas las direcciones.
+
+Revisemos los nombres de las columnas:
+
+```{r}
+names(hospitales)
+```
+
+### Limpieza de la dirección en la base de datos
+
+El siguiente paso es limpiar y depurar detalladamente la dirección.
+
+```{r}
+direccion_clean <- hospitales$direcci_n |> 
+  tolower() |> 
+  str_replace("cl", "Cl") |> 
+  str_replace("kr", "Cra") |> 
+  str_replace("cra", "Cra") |>
+  str_replace("carrera", "Cra") |>
+  str_replace(" # ", " ") |> 
+  str_replace("#", " ") |> 
+  str_replace(" no ", " ") |>
+  str_replace(" nº ", " ") |>
+  str_replace(" n° ", " ") |>
+  str_replace(" n ", " ") |>
+  str_replace("av", "Av") |> 
+  str_replace(" x ", " ") |> 
+  str_replace("x", " ") |> 
+  str_replace(" - ", " ") |> 
+  str_replace("-", " ") |> 
+  str_replace("-", " ") |> 
+  str_replace("  ", " ")
+  
+municipio_clean <- hospitales$nombre_municipio |> 
+  toupper() |> 
+  stri_trans_general("Latin-ASCII")
+
+hospitales <- hospitales |> 
+  mutate(
+    direccion_clean = direccion_clean,
+    municipio_clean = municipio_clean,
+    pais_clean = "COLOMBIA",
+         )
+```
+
+Eliminemos los registros que no tienen longitud ni latitud.
+
+```{r}
+hospitales_clean <- hospitales %>% 
+  filter(!is.na(punto_latitude), !is.na(punto_longitude)) %>% 
+  mutate(
+    lat_oficial = as.numeric(punto_latitude),
+    lon_oficial = as.numeric(punto_longitude),
+    direccion_full = paste(direccion_clean, municipio_clean, "Colombia", sep = ", ")
+  )
+```
+
+Veamos los resultados:
+
+```{r}
+hospitales_clean %>% 
+  select(nombre_sede,direccion_full, lat_oficial, lon_oficial) %>%
+  head()
+```
+
+### Proceso de geocodificación con la dirección y comparación con las coordenadas oficiales
+
+Para este procedimiento usaremos *Argis*
+
+```{r}
+hosp_geo <- geocodificar_seguro(hospitales_clean$direccion_full, method = "arcgis") %>%
+  transmute(direccion_full = address, lat_geo = lat, long_geo = long)
+
+hospitales_geocodificacion <- hospitales_clean %>% left_join(hosp_geo, by = "direccion_full")
+```
+
+Verificamos la cantidad de coordenadas encontradas
+
+```{r}
+hospitales_geocodificacion <- hospitales_geocodificacion %>%
+  mutate(encontrado = if_else(!is.na(lat_geo) & !is.na(long_geo),
+                               "Encontrado", "No encontrado") %>% as.factor())
+
+table(hospitales_geocodificacion$encontrado)
+  
+```
+
+Las 131 direcciones fueron geocodificadas. Por lo menos se encontró un lugar al que pertenecen
+
+```{r}
+hosp_dist <- hospitales_geocodificacion %>% filter(encontrado == "Encontrado")
+
+oficial_sf <- st_as_sf(hosp_dist, coords = c("lon_oficial", "lat_oficial"), crs = 4326)
+geo_sf     <- st_as_sf(hosp_dist, coords = c("long_geo", "lat_geo"), crs = 4326)
+
+hosp_dist$distancia_m <- as.numeric(
+  st_distance(st_transform(oficial_sf, 32618),
+              st_transform(geo_sf, 32618),
+              by_element = TRUE)
+)
+
+hosp_dist %>%
+  select(nombre_sede, nombre_municipio, distancia_m) %>%
+  arrange(desc(distancia_m))
+```
+
+```{r}
+summary(hosp_dist$distancia_m)
+```
+
+El resultado refleja que la geocodificación es bastante precisa para la gran mayoría de los hospitales, con la mitad de los casos ubicados a menos de 202 metros (mediana) y el 75% dentro de los 2,5 kilómetros respecto a su posición oficial. Sin embargo, la distancia promedio se dispara artificialmente hasta los 34,5 kilómetros debido a unos pocos errores extremos, donde resalta un valor máximo de casi 596 kilómetros. Esta enorme brecha entre la mediana y la media demuestra que unos pocos datos se ubicaron por fuera del departamento por fallas en la búsqueda de la dirección, por lo que la mediana representa de forma mucho más confiable la precisión general del proceso.
+
+```{r}
+resumen_muni <- hosp_dist %>% 
+  st_drop_geometry() %>% 
+  group_by(nombre_municipio) %>% 
+  summarise(dist_promedio_km = mean(distancia_m, na.rm = TRUE) / 1000) %>% 
+  arrange(desc(dist_promedio_km))
+
+resumen_muni
+```
+
+```{r}
+ggplot(head(resumen_muni, 10), aes(x = reorder(nombre_municipio, dist_promedio_km), y = dist_promedio_km)) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +
+  labs(
+    title = "Top 10 municipios con mayor discrepancia promedio",
+    subtitle = "Distancia entre coordenada oficial y geocodificada",
+    x = "Municipio",
+    y = "Discrepancia promedio (km)"
+  ) +
+  theme_minimal()
+```
+
+A partir de los datos disponibles en la sección 9, no existe información suficiente para determinar si los municipios con mayor discrepancia promedio comparten características como grado de ruralidad, tamaño poblacional o calidad de la nomenclatura vial, ya que la base de datos no contiene estas variables socioeconómicas ni urbanísticas. No obstante, al observar la tabla y la gráfica del top 10, destaca que municipios como Nariño, El Peñol y Fredonia encabezan la lista con distancias promedio exorbitantes (entre 542 km y 595 km). La hipótesis fundamentada en los datos es que el motor de búsqueda sufrió ambigüedades geográficas severas; por ejemplo, el geocodificador probablemente asoció las direcciones de Nariño con el departamento homónimo en lugar del municipio antioqueño, generando desviaciones masivas que distorsionan el promedio municipal.
+
+# Información de la sesión
+
+```{r}
+sessionInfo()
+```
+
+# Referencias
+
+- Documentación de tidygeocoder: https://jessecambon.github.io/tidygeocoder/
+
+- Documentación de tmaptools: https://cran.r-project.org/package=tmaptools
+
+- Política de uso de Nominatim: https://operations.osmfoundation.org/policies/nominatim/
+
+- Directorio E.S.E. Hospitales de Antioquia con coordenadas, Datos Abiertos Colombia: https://www.datos.gov.co/Salud-y-Protecci-n-Social/Directorio-E-S-E-Hospitales-de-Antioquia-con-coord/pi36-fdpk
+
+- Portal geográfico GeoMedellín: https://www.medellin.gov.co/geomedellin
+
+- Pebesma, E. (2018). Simple Features for R: Standardized Support for Spatial Vector Data. The R Journal.
+
+```{r}
+
+```

@@ -1,0 +1,124 @@
+---
+title: "Untitled"
+format: typst
+editor: visual
+---
+
+
+# Introducción
+
+El objetivo de este documento es explorar los datos sobre el dataset  Ciénaga Grande de Santa Marta, para las tres variables que no fueron exploradas. La idea clave es que dado que ya se realizó la geocodifición de la base de datos y ya están proyectados a un sistema de coordendas, se realizarán un analisis estructural de los datos. Analizando varios aspectos como: observar la dependencia espacial graficamente, test de dependencia espacial, modelamiento del semivariograma, tendencia espacial, normalidad espacial, entre otras. El conjunto de datos posee cuatro variables como: profundidad (m), temperatura ($^\circ C$), salinidad y oxígeno disuelto (mg/L). La temperatura ya se analizó de forma exahustiva en clase, por ello, esta no hará parte del documento.
+
+# Lectura de la base de datos
+
+Vamos a proceder a leer la base de datos y el cargado de las librerias.
+
+```{r}
+# Limpieza del ambiente de trabajo
+
+rm(list=ls())
+
+# Cargado librerias
+
+library(readxl)   # Lectura de archivos xls/xlsx
+library(sf)       # Manejo de datos vectoriales y distancias métricas
+library(gstat)    # Análisis estructural geoestadístico y kriging
+library(tidyverse) # Manipulación de datos y visualización
+library(ade4)     # Test de Mantel (implementación 1)
+library(vegan)    # Test de Mantel (implementación 2) y utilidades de ecología numérica
+library(knitr)    # Tablas
+library(DT)       # Tablas interactivas
+library(scales)   # Formato de ejes y etiquetas
+```
+
+```{r}
+# Lectura del dataset
+
+# Lectura de los datos
+datos.cienaga <- read_excel("data/base_cienaga.xls")
+
+# Vista previa de los datos
+glimpse(datos.cienaga)
+```
+
+En efecto la base de datos quedó correctamente leída. Allí: 
+
+
+-   **Este:** Es la dirección este, proyectada en un sistema de referencia y está medida en metros
+
+-   **Norte:** Es la dirección norte, proyectada en un sistema de referencia y está medida en metros
+
+-   **prof:** Es la profundidad en metros a la cual se toman las medidas.
+
+-   **tem:** Es la temperatura del agua medida en $^\circ C$ en cada una de las estaciones
+
+-   **sali:** Es la salinidad del agua en cada una de las estaciones.
+
+-   **oxig:** Es la medida de oxigeno disuelto en el agua en cada una de las estaciones.
+
+La base de datos posee información sobre 114 estaciones de muestreo en la Ciénaga Grande de Santa Marta.
+
+
+```{r}
+summary(datos.cienaga[, c("Este", "Norte")])
+```
+
+Basados en las proyecciones realizadas, entonces se tiene que la Ciénaga se encuentra proyecta entre 953180 y 976952, en el Este y para el norte se encuentra entre 1679921 y 1706444. Si bien no se conoce el sistema en que están proyectadas las coordenadas, se sabe que están en metros.
+
+```{r}
+summary(datos.cienaga[, c("prof", "temp", "sali", "oxig")])
+```
+
+-   **Profundidad** (prof): Muestra mediciones en un rango somero de 0.25 a 2.50 m, con una media de 1.48 m casi idéntica a la mediana (1.50 m), indicando una distribución simétrica y sin sesgos significativos.
+
+-   **Temperatura** (temp): Registra valores cálidos y estables entre 26.00 °C y 33.20 °C, con un promedio de 29.44 °C que se alinea estrechamente con la mediana de 29.55 °C.
+
+
+-   **Salinidad** (sali): El 75% de los datos se concentra entre 13.03 y 18.44 (media de 17.63), pero presenta un valor máximo atípico de 34.95 que incrementa la variabilidad total.
+
+-   **Oxígeno** (oxig): Varía de 3.03 a 16.29 mg/L con un promedio de 8.81 mg/L, reflejando una amplitud amplia donde la mayoría de los registros se mantienen en niveles adecuados (mediana de 8.65 mg/L)
+
+
+```{r}
+colSums(is.na(datos.cienaga))
+```
+
+La base de datos no reporta valores **missing**
+
+
+# Sistema de coordenadas
+
+Claramente, desde los primeros análisis, se encontró que no se tiene información sobre qué sistema de referencia se está usando para proyectar las coordenadas a un sistema rectangular. Es por ello que, se hará una verificación para encontrar cuál es el sistema empleado en la proyección.
+
+
+```{r}
+punto_referencia <- st_sfc(st_point(c(-74.4360622, 10.8615968)), crs = 4326)
+
+candidatos <- c("MAGNA-SIRGAS / Colombia Bogota zone (3116)" = 3116,
+                "MAGNA-SIRGAS 2018 / Origen-Nacional (9377)" = 9377,
+                "WGS84 / UTM zona 18N (32618)"                = 32618)
+
+purrr::map_dfr(candidatos, function(epsg) {
+  co <- st_coordinates(st_transform(punto_referencia, epsg))
+  tibble(este = co[1], norte = co[2])
+}, .id = "sistema")
+```
+
+A partir de la base de datos, se sabe que el Este se encuentra entre `r format(min(datos.cienaga$Este), scientific = FALSE)` y `r format(max(datos.cienaga$Este), scientific = FALSE)`. Mientras que para el Norte se encuentra entre `r format(min(datos.cienaga$Norte), scientific = FALSE)` y `r format(max(datos.cienaga$Norte), scientific = FALSE)`.
+
+El EPSG:3116 (“MAGNA-SIRGAS / Colombia Bogotá zone”, el origen plano IGAC centrado en Bogotá) coloca el punto de referencia justo en el centro del rango observado de los datos; los otros dos candidatos quedan muy lejos. Usaremos EPSG:3116 para todos los objetos espaciales de esta práctica.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
