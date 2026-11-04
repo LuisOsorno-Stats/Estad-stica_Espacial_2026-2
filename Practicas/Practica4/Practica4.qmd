@@ -1,0 +1,58 @@
+---
+title: "Práctica 4 de estadística espacial"
+date: today
+author:
+  - name: "Nombre: Luis Gabriel Osorno Muñoz, CC: 1032456789"
+    affiliation: "Universidad Nacional de Colombia - Sede Medellín, Facultad de Ciencias"
+format:
+  typst:
+    mainfont: "Liberation Sans"
+execute:
+  knitr:
+    opts_chunk:
+      dev: "cairo_pdf"
+      dpi: 300
+always_allow_html: true
+editor: visual
+---
+
+
+# Introducción
+
+En la Práctica 3 se analizaron 114 estaciones reales de la Ciénaga Grande de Santa Marta para intentar inferir su patrón espacial, pero con el problema de no conocer la verdadera estructura de fondo del fenómeno. Esta práctica invierte esa lógica: ahora el objetivo será simular los datos definiendo desde el principio su covarianza y tendencia. Trabajar con un entorno controlado permite comprobar de primera mano si las herramientas de ajuste realmente recuperan los parámetros teóricos y qué tan confiables son cuando las aplicas en situaciones reales donde la verdad es desconocida.
+
+A lo largo del documento se explorarán e interpretarán los parámetros fundamentales de la covarianza espacial (como meseta, rango y pepita) y simularán campos aleatorios mediante gstat. Además, verificando si los semivariogramas empíricos reproducen los modelos teóricos generadores, comparando distintos modelos (esférico, exponencial, Gaussiano y Matérn) usando la suma de cuadrados del error (SSErr), observaremos la anisotropías direccionales y una breve aplicación de este proceso a los datos reales de temperatura de la Ciénaga Grande.
+
+La idea principal, es ir combinando los análisis hechos, con los 6 ejercicios propuestos. Cada que se implemente uno de ellos, se dirá explicitamente cual es el el enunciado. 
+
+# Preparación del entorno
+
+Vamos a cargar las librerias que emplearemos en esta práctica, definiendo claramente su uso.
+
+
+```{r}
+library(sf)        # Manejo de los objetos espaciales
+library(gstat)     # Simulación y análisis espacial
+library(tidyverse) # Posee muchas funciones utiles en R
+library(scales)    # Automatiza la elección de breaks y labels en ejes
+```
+
+
+# Modelos teóricos de covarianza espacial
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

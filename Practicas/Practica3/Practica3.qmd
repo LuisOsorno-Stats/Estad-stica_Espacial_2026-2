@@ -1,13 +1,24 @@
 ---
-title: "Untitled"
-format: typst
+title: "Práctica 3 de estadística espacial"
+date: today
+author:
+  - name: "Nombre: Luis Gabriel Osorno Muñoz, CC: 1032456789"
+    affiliation: "Universidad Nacional de Colombia - Sede Medellín, Facultad de Ciencias"
+format:
+  typst:
+    mainfont: "Liberation Sans"
+execute:
+  knitr:
+    opts_chunk:
+      dev: "cairo_pdf"
+      dpi: 300
+always_allow_html: true
 editor: visual
 ---
 
-
 # Introducción
 
-El objetivo de este documento es explorar los datos sobre el dataset  Ciénaga Grande de Santa Marta, para las tres variables que no fueron exploradas. La idea clave es que dado que ya se realizó la geocodifición de la base de datos y ya están proyectados a un sistema de coordendas, se realizarán un analisis estructural de los datos. Analizando varios aspectos como: observar la dependencia espacial graficamente, test de dependencia espacial, modelamiento del semivariograma, tendencia espacial, normalidad espacial, entre otras. El conjunto de datos posee cuatro variables como: profundidad (m), temperatura ($^\circ C$), salinidad y oxígeno disuelto (mg/L). La temperatura ya se analizó de forma exahustiva en clase, por ello, esta no hará parte del documento.
+El objetivo de este documento es explorar los datos sobre el dataset Ciénaga Grande de Santa Marta, para las tres variables que no fueron exploradas. La idea clave es que dado que ya se realizó la geocodifición de la base de datos y ya están proyectados a un sistema de coordendas, se realizarán un analisis estructural de los datos. Analizando varios aspectos como: observar la dependencia espacial graficamente, test de dependencia espacial, modelamiento del semivariograma, tendencia espacial, normalidad espacial, entre otras. El conjunto de datos posee cuatro variables como: profundidad (m), temperatura ($^\circ C$), salinidad y oxígeno disuelto (mg/L). La temperatura ya se analizó de forma exahustiva en clase, por ello, esta no hará parte del documento.
 
 # Lectura de la base de datos
 
@@ -29,6 +40,8 @@ library(vegan)    # Test de Mantel (implementación 2) y utilidades de ecología
 library(knitr)    # Tablas
 library(DT)       # Tablas interactivas
 library(scales)   # Formato de ejes y etiquetas
+library(patchwork)# Combinar graficos de ggplot2
+library(ggplot2)  # Realizar graficos
 ```
 
 ```{r}
@@ -41,23 +54,21 @@ datos.cienaga <- read_excel("data/base_cienaga.xls")
 glimpse(datos.cienaga)
 ```
 
-En efecto la base de datos quedó correctamente leída. Allí: 
+En efecto la base de datos quedó correctamente leída. Allí:
 
+- **Este:** Es la dirección este, proyectada en un sistema de referencia y está medida en metros
 
--   **Este:** Es la dirección este, proyectada en un sistema de referencia y está medida en metros
+- **Norte:** Es la dirección norte, proyectada en un sistema de referencia y está medida en metros
 
--   **Norte:** Es la dirección norte, proyectada en un sistema de referencia y está medida en metros
+- **prof:** Es la profundidad en metros a la cual se toman las medidas.
 
--   **prof:** Es la profundidad en metros a la cual se toman las medidas.
+- **tem:** Es la temperatura del agua medida en $^\circ C$ en cada una de las estaciones
 
--   **tem:** Es la temperatura del agua medida en $^\circ C$ en cada una de las estaciones
+- **sali:** Es la salinidad del agua en cada una de las estaciones.
 
--   **sali:** Es la salinidad del agua en cada una de las estaciones.
-
--   **oxig:** Es la medida de oxigeno disuelto en el agua en cada una de las estaciones.
+- **oxig:** Es la medida de oxigeno disuelto en el agua en cada una de las estaciones.
 
 La base de datos posee información sobre 114 estaciones de muestreo en la Ciénaga Grande de Santa Marta.
-
 
 ```{r}
 summary(datos.cienaga[, c("Este", "Norte")])
@@ -69,15 +80,13 @@ Basados en las proyecciones realizadas, entonces se tiene que la Ciénaga se enc
 summary(datos.cienaga[, c("prof", "temp", "sali", "oxig")])
 ```
 
--   **Profundidad** (prof): Muestra mediciones en un rango somero de 0.25 a 2.50 m, con una media de 1.48 m casi idéntica a la mediana (1.50 m), indicando una distribución simétrica y sin sesgos significativos.
+- **Profundidad** (prof): Muestra mediciones en un rango somero de 0.25 a 2.50 m, con una media de 1.48 m casi idéntica a la mediana (1.50 m), indicando una distribución simétrica y sin sesgos significativos.
 
--   **Temperatura** (temp): Registra valores cálidos y estables entre 26.00 °C y 33.20 °C, con un promedio de 29.44 °C que se alinea estrechamente con la mediana de 29.55 °C.
+- **Temperatura** (temp): Registra valores cálidos y estables entre 26.00 °C y 33.20 °C, con un promedio de 29.44 °C que se alinea estrechamente con la mediana de 29.55 °C.
 
+- **Salinidad** (sali): El 75% de los datos se concentra entre 13.03 y 18.44 (media de 17.63), pero presenta un valor máximo atípico de 34.95 que incrementa la variabilidad total.
 
--   **Salinidad** (sali): El 75% de los datos se concentra entre 13.03 y 18.44 (media de 17.63), pero presenta un valor máximo atípico de 34.95 que incrementa la variabilidad total.
-
--   **Oxígeno** (oxig): Varía de 3.03 a 16.29 mg/L con un promedio de 8.81 mg/L, reflejando una amplitud amplia donde la mayoría de los registros se mantienen en niveles adecuados (mediana de 8.65 mg/L)
-
+- **Oxígeno** (oxig): Varía de 3.03 a 16.29 mg/L con un promedio de 8.81 mg/L, reflejando una amplitud amplia donde la mayoría de los registros se mantienen en niveles adecuados (mediana de 8.65 mg/L)
 
 ```{r}
 colSums(is.na(datos.cienaga))
@@ -85,11 +94,9 @@ colSums(is.na(datos.cienaga))
 
 La base de datos no reporta valores **missing**
 
-
 # Sistema de coordenadas
 
 Claramente, desde los primeros análisis, se encontró que no se tiene información sobre qué sistema de referencia se está usando para proyectar las coordenadas a un sistema rectangular. Es por ello que, se hará una verificación para encontrar cuál es el sistema empleado en la proyección.
-
 
 ```{r}
 punto_referencia <- st_sfc(st_point(c(-74.4360622, 10.8615968)), crs = 4326)
@@ -108,17 +115,816 @@ A partir de la base de datos, se sabe que el Este se encuentra entre `r format(m
 
 El EPSG:3116 (“MAGNA-SIRGAS / Colombia Bogotá zone”, el origen plano IGAC centrado en Bogotá) coloca el punto de referencia justo en el centro del rango observado de los datos; los otros dos candidatos quedan muy lejos. Usaremos EPSG:3116 para todos los objetos espaciales de esta práctica.
 
+# Objetos espaciales
 
+Una vez conocido el sistema de coordenadas, procedemos a realizar la proyección en el sistema adecuado, que fue identificado.
 
+```{r}
+datos_sf <- st_as_sf(datos.cienaga, coords = c("Este", "Norte"), crs = 3116, remove = FALSE)
+datos_sf
+```
 
+Verificamos que el polígono esté cerrado
 
+```{r}
+contorno_df <- read.table("data/cienaga_border.txt", header = TRUE)
 
+primero <- as.numeric(contorno_df[1, ])
+ultimo  <- as.numeric(contorno_df[nrow(contorno_df), ])
+dist_cierre <- sqrt(sum((primero - ultimo)^2))
+cat("Distancia entre el primer y el último punto del contorno:",
+    round(dist_cierre, 1), "m (el anillo NO está cerrado)\n")
+```
 
+Procedemos a cerrarlo
 
+```{r}
+# Cerramos el anillo repitiendo el primer punto al final
+contorno_cerrado <- rbind(contorno_df, contorno_df[1, ])
 
+contorno_sf <- st_sf(
+  nombre = "Ciénaga Grande de Santa Marta",
+  geometry = st_sfc(st_polygon(list(as.matrix(contorno_cerrado))), crs = 3116)
+)
 
+cat("¿Polígono válido?", st_is_valid(contorno_sf), "\n")
+```
 
+```{r}
+cat("Área del contorno:", round(as.numeric(st_area(contorno_sf)) / 1e6, 1), "km²\n")
+```
 
+Se verifica que todas las estaciones de muestreo estén dentro del polígono
 
+```{r}
+dentro <- st_within(datos_sf, contorno_sf, sparse = FALSE)
+cat("Estaciones dentro del contorno:", sum(dentro), "de", nrow(datos_sf), "\n")
+```
 
+# Análisis estructural de la Profundidad, Salinidad y Oxigeno
 
+De forma simultanea, vamos a realizar el análisis estructural a las tres variables, es decir, a la la Profundidad, Salinidad y Oxigeno. La idea es verificar los elementos necesarios para un modelamiento posterior, es decir, observar la estructura espacial de los datos, dependencia espacial, tendencia a gran escala, normalidad, entre otros.
+
+## Visualización exploratoria
+
+A continuación se presenta la caracterización espacial de la profundidad, la salinidad y el oxígeno disuelto en la Ciénaga Grande de Santa Marta a partir de su red de monitoreo. Este análisis permite identificar gradientes y patrones regionales para evaluar la presencia de tendencias a gran escala en el cuerpo de agua.
+
+### Variable Profundidad
+
+Veremos la distribución espacial de los puntos y coloreados por la profundidad
+
+```{r dev="png"}
+ggplot() +
+  # Dibuja el polígono asegurando que no altere el fondo externo
+  geom_sf(data = st_make_valid(contorno_sf), fill = "#d6ecf5", color = "#3a7ca5", linewidth = 0.4) +
+  geom_sf(data = datos_sf, aes(color = prof), size = 2) +
+  scale_color_viridis_c(option = "inferno", name = "Profundidad (m)") +
+  coord_sf(crs = st_crs(3116)) +
+  labs(
+    title = "Estaciones de muestreo en la Ciénaga Grande de Santa Marta",
+    subtitle = "Color: Profundidad — EPSG:3116"
+  ) +
+  theme_void(base_size = 11) + # theme_void elimina ejes y marcos que causan el cuadro negro
+  theme(
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background  = element_rect(fill = "white", color = NA),
+    legend.position  = "right",
+    plot.title       = element_text(face = "bold", size = 12, hjust = 0.5),
+    plot.subtitle    = element_text(size = 10, hjust = 0.5)
+  )
+```
+
+Al analizar los puntos de muestreo distribuidos a lo largo de la cienaga, se observa una transición muy clara: la zona más profunda se ubica hacia el occidente y noroccidente (marcada en tonos amarillos y naranjas con niveles de $2.0$ a $2.5$ metros), el centro mantiene una profundidad media bastante uniforme (alrededor de $1.5$ metros en tonos rojos), mientras que las áreas más llanas y poco profundas se concentran hacia los bordes del oriente, el sur y algunos puntos aislados del norte (con tonos morados y negros de apenas $0.5$ a $1.0$ metro de profundidad). En general se observa que hay un gradiente en sentido occidente oriente. Existe cierto comportamiento en bloques y una transición suave.
+
+### Variable Salinidad
+
+Similarmente, veamos la distribución espacial de los puntos y coloreados por la salinidad
+
+```{r dev="png"}
+ggplot() +
+  geom_sf(data = contorno_sf, fill = "#d6ecf5", color = "#3a7ca5") +
+  geom_sf(data = datos_sf, aes(color = sali), size = 2.2) +
+  scale_color_viridis_c(option = "inferno", name = "Salinidad") +
+  labs(title = "Estaciones de muestreo en la Ciénaga Grande de Santa Marta",
+       subtitle = "Color: Salinidad — EPSG:3116") +
+  theme_minimal()
+```
+
+Para la variable de salinidad, se observa un patrón espacial muy marcado y localizado: la mayor parte del cuerpo de agua presenta una salinidad baja y altamente uniforme (marcada en tonos morados oscuros y negros con valores de $15$ a $20$), lo que abarca la totalidad de las zonas occidente, centro y sur. La única excepción significativa se concentra en el extremo nororiente, donde la salinidad aumenta drásticamente alcanzando sus niveles más altos (representados en tonos amarillos y naranjas con valores de $25$ a más de $30$). En general, no se aprecia un gradiente continuo a lo largo de toda la ciénaga, sino una distribución homogénea de baja salinidad en casi todo el territorio con un marcado comportamiento puntual o en bloque de alta salinidad hacia la boca o comunicación marina en el nororiente.
+
+### Variable Oxigeno
+
+Finalmente, veamos la distribución espacial de los puntos y coloreados por el oxigeno
+
+```{r dev="png"}
+ggplot() +
+  geom_sf(data = contorno_sf, fill = "#d6ecf5", color = "#3a7ca5") +
+  geom_sf(data = datos_sf, aes(color = oxig), size = 2.2) +
+  scale_color_viridis_c(option = "inferno", name = "Oxigeno") +
+  labs(title = "Estaciones de muestreo en la Ciénaga Grande de Santa Marta",
+       subtitle = "Color: Oxigeno — EPSG:3116") +
+  theme_minimal()
+```
+
+Finalmente, para la cantidad de oxigeno disuelto en el agua, se observa una transición muy clara y estructurada en sentido sur-norte y hacia el centro: la zona con los niveles más altos de oxígeno se localiza en una franja transversal en la parte media-central (marcada en tonos amarillos y naranjas claros con valores de $12$ a $16$), mientras que las concentraciones intermedias (alrededor de $8$ a $10$ en tonos rojizos) se extienden hacia el nororiente. En contraste, los valores más bajos de oxígeno se ubican hacia el occidente, el extremo norte y principalmente todo el sector sur de la ciénaga (representados en tonos morados oscuros y negros con niveles de $4$ a $6$). En general, se evidencia un claro comportamiento en franjas o bloques horizontales con una transición progresiva entre el centro altamente oxigenado y los extremos de menor concentración.
+
+## Semivariograma cloud
+
+Realizaremos el semivariograma cloud para cada par de observaciones, midiendo la disimilitud comparada con la distancia geográfica. Nuevamente, el análisis se realizara de manera simultanea para las tres variables en cuestión.
+
+### Variable Profundidad
+
+Para la profundidad, el semivariograma cloud nos permite ver qué tanto cambia la hondura del agua a medida que nos alejamos entre un punto y otro. Esta nube de puntos sirve para observar la dispersión inicial de los datos y ver si la diferencia entre lugares cercanos y lejanos sigue un patrón claro o si hay mucho ruido.
+
+```{r}
+vc_prof <- variogram(prof ~ 1, datos_sf, cloud = TRUE)
+
+ggplot(as.data.frame(vc_prof), aes(x = dist, y = gamma)) +
+  geom_point(alpha = 0.25, size = 1) +
+  geom_smooth(method = "loess", se = FALSE, color = "darkred") +
+  theme_test(base_size = 13) +
+  labs(x = "Distancia geográfica (m)", y = expression((Z(s[i]) - Z(s[j]))^2),
+       title = "Semivariograma cloud — Profundidad") +
+  theme(axis.title = element_text(face = "bold"))
+```
+
+Esta gráfica muestra un semivariograma cloud para la profundidad, estas distancias van desde $1000$ hasta más de $10\ 000\text{ m}$. La gran concentración de puntos cerca de la base indica que la mayoría de los sitios presentan profundidades muy similares entre sí, mientras que los valores altos y aislados reflejan comparaciones puntuales entre las orillas más llanas y el sector más profundo. Finalmente, la línea roja prácticamente plana y horizontal confirma que la variación del fondo marino no se dispara radicalmente con la distancia, reflejando un relieve suave y bastante uniforme a lo largo de toda la ciénaga.
+
+### Variable Salinidad
+
+En la salinidad, este gráfico nos ayuda a comparar las diferencias de sal entre todos los puntos muestreados. Dado que casi toda la ciénaga tiene valores bajos y solo el nororiente presenta salinidad alta, la nube mostrará que las mayores diferencias se dan únicamente al comparar el resto del cuerpo de agua con esa zona de entrada marina.
+
+```{r}
+vc_sali <- variogram(sali ~ 1, datos_sf, cloud = TRUE)
+
+ggplot(as.data.frame(vc_sali), aes(x = dist, y = gamma)) +
+  geom_point(alpha = 0.25, size = 1) +
+  geom_smooth(method = "loess", se = FALSE, color = "darkred") +
+  theme_test(base_size = 13) +
+  labs(x = "Distancia geográfica (m)", y = expression((Z(s[i]) - Z(s[j]))^2),
+       title = "Semivariograma cloud — Salinidad") +
+  theme(axis.title = element_text(face = "bold"))
+```
+
+La acumulación de puntos en la base (cerca de cero) evidencia que la gran mayoría de las estaciones comparten salinidades prácticamente idénticas en casi toda la ciénaga. Por otro lado, la dispersión de puntos altos en el eje vertical (con valores de disimilitud entre $100$ y $250$) refleja únicamente las comparaciones entre las estaciones de la masa de agua principal y el foco puntual de alta salinidad en el nororiente. Finalmente, la línea roja horizontal y casi plana confirma que la salinidad se mantiene constante en la mayor parte del ecosistema, sin presentar un gradiente progresivo con la distancia a gran escala.
+
+### Variable Oxigeno
+
+Para el oxígeno, la nube de puntos compara cómo varían las concentraciones de gas entre distintas zonas de la ciénaga. Esto ayuda a visualizar fácilmente la diferencia entre las estaciones ubicadas en la franja central (donde el oxígeno es alto) y las estaciones de los extremos norte y sur (donde es mucho más bajo).
+
+```{r}
+vc_oxig <- variogram(oxig ~ 1, datos_sf, cloud = TRUE)
+
+ggplot(as.data.frame(vc_oxig), aes(x = dist, y = gamma)) +
+  geom_point(alpha = 0.25, size = 1) +
+  geom_smooth(method = "loess", se = FALSE, color = "darkred") +
+  theme_test(base_size = 13) +
+  labs(x = "Distancia geográfica (m)", y = expression((Z(s[i]) - Z(s[j]))^2),
+       title = "Semivariograma cloud — Oxigeno") +
+  theme(axis.title = element_text(face = "bold"))
+```
+
+A diferencia de las otras variables, la dispersión vertical de los puntos de disimilitud aumenta progresivamente con la distancia (alcanzando valores de hasta $80$), lo cual evidencia la marcada transición entre la franja central hiperoxigenada y los extremos norte y sur de baja concentración. Esta marcada estructura se refleja en la tendencia de la línea roja, la cual muestra una curva ascendente continua que parte de valores cercanos a cero a distancias cortas y sube paulatinamente hasta estabilizarse cerca de $15$ pasados los $10\ 000\text{ m}$, confirmando que la disimilitud del oxígeno sí depende fuertemente de la distancia geográfica y de la presencia de un patrón regional bien definido.
+
+## Test de Mantel
+
+El test de Mantel es una prueba estadística diseñada para determinar si existe una relación espacial entre dos variables estructuradas en matrices de disimilitud o distancia; en este contexto, evalúa si la separación geográfica entre los puntos de muestreo se relaciona directamente con las diferencias en los valores de la variable analizada. Actúa de forma análoga a una correlación convencional, pero al trabajar sobre parejas de distancias en lugar de datos individuales, recurre a un procedimiento de permutación para obtener la significancia estadística ($valor\ p$) de manera válida.
+
+- Hipótesis nula ($H_0$): No existe correlación espacial entre las matrices; los datos se distribuyen con aleatoriedad espacial.
+
+- Hipótesis alternativa ($H_a$): Existe correlación espacial; la variación de la variable depende de la ubicación geográfica de los puntos.
+
+```{r}
+geodist  <- dist(st_coordinates(datos_sf))
+```
+
+### Variable Profundidad
+
+El test de Mantel para la profundidad evalúa si los puntos más lejanos en la ciénaga tienen fondos más diferentes entre sí. Nos permite confirmar con datos si la forma del fondo del agua cambia según la ubicación o si sus variaciones ocurren al azar
+
+```{r}
+dist_prof <- dist(datos.cienaga$prof)
+
+mantel_vegan_prof <- vegan::mantel(geodist, dist_prof, permutations = 999)
+mantel_vegan_prof
+```
+
+El resultado del test de Mantel muestra que existe una correlación espacial estadísticamente significativa ($p = 0.001$, basado en $999$ permutaciones); lo que permite rechazar la hipótesis nula de aleatoriedad espacial. Sin embargo, la magnitud de esta relación es positiva pero débil ($r = 0.1908$), indicando que aunque los puntos más lejanos tienden a presentar profundidades ligeramente más distintas, la ubicación geográfica por sí sola no genera variaciones drásticas en el fondo del cuerpo de agua.
+
+### Variable Salinidad
+
+En la salinidad, esta prueba mide si la cantidad de sal en el agua cambia a medida que nos alejamos entre una estación y otra. Nos sirve para comprobar si la sal se distribuye de forma aleatoria o si depende directamente de la zona geográfica analizada.
+
+```{r}
+dist_sali <- dist(datos.cienaga$sali)
+
+mantel_vegan_sali <- vegan::mantel(geodist, dist_sali, permutations = 999)
+mantel_vegan_sali
+```
+
+El resultado del test de Mantel para la salinidad muestra una correlación espacial estadísticamente significativa ($p = 0.001$, basado en $999$ permutaciones), lo que permite rechazar la hipótesis nula de aleatoriedad espacial. La relación observada es positiva y moderada ($r = 0.2838$), indicando que las diferencias en la concentración de sal sí dependen de la distancia entre puntos, impulsadas principalmente por el contraste entre el foco de alta salinidad en el nororiente y la homogeneidad del resto de la ciénaga.
+
+### Variable Oxigeno
+
+Para el oxígeno disuelto, el test analiza si la concentración de aire en el agua guarda relación con la distancia entre los sitios de muestreo. Permite saber si las diferencias de oxígeno dependen de la ubicación geográfica de los puntos.
+
+```{r}
+dist_oxig <- dist(datos.cienaga$oxig)
+
+mantel_vegan_oxig <- vegan::mantel(geodist, dist_oxig, permutations = 999)
+mantel_vegan_oxig
+```
+
+El resultado del test de Mantel para el oxígeno disuelto muestra una correlación espacial estadísticamente significativa ($p = 0.011$, basado en $999$ permutaciones), lo que permite rechazar la hipótesis nula de aleatoriedad espacial. Sin embargo, la magnitud de esta relación es extremadamente débil ($r = 0.07549$), lo que indica que, aunque existe un patrón de franjas definido en el ecosistema, la distancia geográfica por sí sola explica de forma muy limitada las variaciones en los niveles de oxígeno entre estaciones.
+
+## Semivariograma empírico
+
+Para reducir el ruido generado por el semivariograma cloud, se realizará un semivariograma tipo bins. La idea es agrupar los puntos en intervalos, a una distancia dada y luego se promedia su disimilitud. Nuevamente, el enfoque es hacer el análisis para las tres variables.
+
+```{r}
+distancia_maxima <- max(dist(st_coordinates(datos_sf)))
+ancho_intervalo  <- distancia_maxima / 12   # ~12 intervalos, balance resolución/estabilidad
+
+cat("Distancia máxima entre estaciones (completa):",
+    round(max(dist(st_coordinates(datos_sf))), 0), "m\n")
+```
+
+```{r}
+cat("Distancia máxima usada (cutoff):", round(distancia_maxima, 0), "m\n")
+```
+
+```{r}
+cat("Ancho de cada intervalo:", round(ancho_intervalo, 0), "m\n")
+```
+
+### Variable Profundidad
+
+Para la profundidad, agrupamos las distancias en intervalos (bins) y promediamos sus diferencias para suavizar el gráfico. Esto nos permite ver con claridad la distancia a partir de la cual el fondo de la ciénaga deja de parecerse entre sí.
+
+```{r}
+v_prof <- variogram(prof ~ 1, datos_sf, cutoff = distancia_maxima, width = ancho_intervalo)
+v_prof
+```
+
+```{r}
+ggplot(v_prof, aes(x = dist, y = gamma)) +
+  geom_point(aes(size = np), color = "#3a7ca5") +
+  geom_line(color = "#3a7ca5", linetype = "dashed") +
+  scale_size_continuous(name = "N° pares", range = c(1.5, 5)) +
+  theme_test(base_size = 13) +
+  labs(x = "Distancia (m)", y = expression(hat(gamma)(h)),
+       title = "Semivariograma empírico (sin remover tendencia) — Profundidad") +
+  theme(axis.title = element_text(face = "bold"))
+```
+
+El semivariograma empírico de la profundidad confirma la presencia del gradiente espacial en la ciénaga, mostrando valores bajos de semivarianza (alrededor de $0.075$) a distancias cortas (de $1000$ a $3000\text{ m}$) que reflejan la gran similitud entre puntos cercanos, seguidos de un crecimiento continuo hasta un pico cercano a $0.185$ a los $20\ 000\text{ m}$. Este ascenso sostenido evidencia una clara tendencia regional a gran escala (el gradiente de este a oeste), mientras que las fluctuaciones posteriores responden a los límites geográficos del cuerpo de agua, lo que justifica la remoción previa de la tendencia.
+
+### Variable Salinidad
+
+En la salinidad, el semivariograma por intervalos promedia los puntos para eliminar el ruido visual. Así se logra identificar de forma sencilla cómo cambia la concentración de sal a medida que aumenta la separación entre zonas.
+
+```{r}
+v_sali <- variogram(sali ~ 1, datos_sf, cutoff = distancia_maxima, width = ancho_intervalo)
+v_sali
+```
+
+```{r}
+ggplot(v_sali, aes(x = dist, y = gamma)) +
+  geom_point(aes(size = np), color = "#3a7ca5") +
+  geom_line(color = "#3a7ca5", linetype = "dashed") +
+  scale_size_continuous(name = "N° pares", range = c(1.5, 5)) +
+  theme_test(base_size = 13) +
+  labs(x = "Distancia (m)", y = expression(hat(gamma)(h)),
+       title = "Semivariograma empírico (sin remover tendencia) — Salinidad") +
+  theme(axis.title = element_text(face = "bold"))
+```
+
+El semivariograma empírico de la salinidad refleja claramente la baja variabilidad general de la ciénaga combinada con el fuerte contraste hacia el nororiente, mostrando valores de semivarianza extremadamente bajos y casi constantes (cercanos a $0$ y por debajo de $10$) a distancias cortas y medias hasta los $15\ 000\text{ m}$. Sin embargo, a partir de los $20\ 000\text{ m}$ y especialmente al superar los $25\ 000\text{ m}$, la semivarianza experimenta un incremento drástico que se dispara hasta superar un valor de $80$. Este comportamiento exponencial confirma que la variabilidad no ocurre de forma progresiva a corta distancia, sino únicamente cuando las comparaciones incluyen el sector con influencia marina ubicado en el extremo nororiente frente a las zonas distantes del resto del cuerpo de agua.
+
+### Variable Oxigeno
+
+Para el oxígeno disuelto, agrupar las distancias en bloques nos ayuda a ver la tendencia promedio de la variable. De esta manera, confirmamos de forma limpia cómo varía el oxígeno a lo largo de la ciénaga sin la distracción de datos aislados.
+
+```{r}
+v_oxig <- variogram(oxig ~ 1, datos_sf, cutoff = distancia_maxima, width = ancho_intervalo)
+v_oxig
+```
+
+```{r}
+ggplot(v_oxig, aes(x = dist, y = gamma)) +
+  geom_point(aes(size = np), color = "#3a7ca5") +
+  geom_line(color = "#3a7ca5", linetype = "dashed") +
+  scale_size_continuous(name = "N° pares", range = c(1.5, 5)) +
+  theme_test(base_size = 13) +
+  labs(x = "Distancia (m)", y = expression(hat(gamma)(h)),
+       title = "Semivariograma empírico (sin remover tendencia) — Oxigeno") +
+  theme(axis.title = element_text(face = "bold"))
+```
+
+El semivariograma empírico del oxígeno disuelto muestra un marcado comportamiento parabólico, donde la semivarianza crece de forma sostenida a distancias cortas hasta alcanzar un pico máximo cercano a $15.5$ alrededor de los $12\ 000\text{ m}$. Este ascenso inicial evidencia la fuerte diferencia entre la franja central hiperoxigenada y los extremos de baja concentración en la ciénaga. Sin embargo, a partir de los $12\ 000\text{ m}$ y hasta superar los $30\ 000\text{ m}$, la semivarianza cae drásticamente a valores cercanos a $1$, lo que indica un efecto de periodicidad: las zonas separadas por distancias muy grandes vuelven a presentar valores de oxígeno muy parecidos entre sí (por ejemplo, al comparar el extremo norte con el extremo sur, ambos con niveles igualmente bajos).
+
+## Diágnostico de tendencia a gran escala
+
+Identificar la tendencia a gran escala antes de graficar el semivariograma por intervalos (bins) es fundamental para capturar la verdadera estructura espacial. Al detectar y remoción previa de esta tendencia a gran escala, se aísla la variabilidad local, garantizando un semivariograma preciso y un modelado geoestadístico confiable. Verifiquemos si existe tendencia en cada una de las variables analizadas.
+
+### Variable Profundidad
+
+En la profundidad, la presencia de un gradiente sostenido entre el oriente y el occidente de la ciénaga evidencia una tendencia clara a gran escala. Remover este patrón mediante una superficie polinomial permite aislar el componente regional y trabajar con los residuos para capturar la verdadera autocorrelación a corta distancia.
+
+```{r}
+datos.cienaga %>%
+  pivot_longer(cols = c(Este, Norte), names_to = "coordenada", values_to = "valor") %>%
+  ggplot(aes(x = valor, y = prof)) +
+  geom_point(alpha = 0.4) +
+  geom_smooth(method = "lm", color = "darkred") +
+  facet_wrap(~coordenada, scales = "free_x") +
+  theme_test(base_size = 13) +
+  labs(x = NULL, y = "Temperatura (°C)",
+       title = "Temperatura vs. coordenadas — evidencia de tendencia") +
+  theme(axis.title = element_text(face = "bold"))
+```
+
+Esta gráfica confirma la presencia de una tendencia lineal a gran escala, reflejada principalmente en el eje Este por una línea roja descendente que muestra una disminución continua de los valores (de $1.75$ a $1.20$) a medida que se avanza hacia el oriente (de $960\ 000$ a $970\ 000\text{ m}$). Por su parte, el eje Norte presenta una línea casi plana con una inclinación muy leve (de $1.35$ a $1.55$), lo que indica que los valores se mantienen prácticamente constantes en esa dirección. En conclusión, el comportamiento gráfico justifica la necesidad de remover una tendencia de primer orden (lineal) sobre la coordenada Este antes de proceder con el ajuste del semivariograma.
+
+### Variable Salinidad
+
+Para la salinidad, aunque el cuerpo de agua presenta valores bajos homogéneos en casi toda su extensión, el marcado contraste del nororiente genera un comportamiento de tendencia que distorsiona la semivarianza a distancias largas. La remoción de esta estructura a gran escala ayuda a estabilizar los residuos y evaluar si existe variabilidad espacial pura en la masa de agua principal.
+
+```{r}
+datos.cienaga %>%
+  pivot_longer(cols = c(Este, Norte), names_to = "coordenada", values_to = "valor") %>%
+  ggplot(aes(x = valor, y = sali)) +
+  geom_point(alpha = 0.4) +
+  geom_smooth(method = "lm", color = "darkred") +
+  facet_wrap(~coordenada, scales = "free_x") +
+  theme_test(base_size = 13) +
+  labs(x = NULL, y = "Salinidad",
+       title = "Salinidad vs. coordenadas — evidencia de tendencia") +
+  theme(axis.title = element_text(face = "bold"))
+```
+
+Esta gráfica muestra la evaluación de tendencia espacial para la salinidad, evidenciando una alta homogeneidad en la gran mayoría de la ciénaga combinada con una anomalía puntual en el sector nororiental. Tanto en el eje Este como en el Norte, las líneas rojas de ajuste se mantienen prácticamente planas y horizontales alrededor de un valor constante de salinidad (entre $17$ y $18$), lo que indica la ausencia de una tendencia gradual continua a gran escala en todo el cuerpo de agua. No obstante, en los extremos superiores de ambas coordenadas (hacia el oriente y norte) sobresale un grupo reducido de puntos aislados con valores atípicos muy altos (entre $28$ y $35$), los cuales representan la entrada directa de agua marina y confirman que el comportamiento regional está dominado por esa zona puntual más que por un gradiente espacial uniforme.
+
+### Variable Oxigeno
+
+En el oxígeno disuelto, la alternancia entre la franja central hiperoxigenada y los extremos de baja concentración origina un efecto de periodicidad o curva en forma de domo. Sustraer la tendencia regional elimina esta simetría global para analizar únicamente las variaciones locales entre estaciones vecinas.
+
+```{r}
+datos.cienaga %>%
+  pivot_longer(cols = c(Este, Norte), names_to = "coordenada", values_to = "valor") %>%
+  ggplot(aes(x = valor, y = oxig)) +
+  geom_point(alpha = 0.4) +
+  geom_smooth(method = "lm", color = "darkred") +
+  facet_wrap(~coordenada, scales = "free_x") +
+  theme_test(base_size = 13) +
+  labs(x = NULL, y = "Oxigeno",
+       title = "Oxigeno vs. coordenadas — evidencia de tendencia") +
+  theme(axis.title = element_text(face = "bold"))
+```
+
+Esta gráfica confirma que el oxígeno disuelto presenta una estructura espacial compleja que combina un incremento lineal en el eje Este (con una línea roja ascendente que sube de $7$ a $10$) con un patrón claramente **cuadrático o de segundo orden en el eje Norte**. En esta dirección Norte-Sur, aunque la línea lineal se observa plana en $9$, la nube de datos revela que los valores parten bajos en el sur ($4-6$), alcanzan un pico hiperoxigenado en el centro ($12-16$) cerca de la coordenada $1\ 694\ 000\text{ m}$, y vuelven a caer a niveles bajos en el norte ($4-6$). Por lo tanto, el comportamiento justifica remover una tendencia cuadrática (superficie polinomial de segundo orden) para capturar adecuadamente la variabilidad a gran escala antes de ajustar el semivariograma.
+
+## Remoción de la tendencia
+
+Para ajustar los semivariogramas para cada variable sin las distorsiones del gradiente observado en la ciénaga, se utiliza el paquete gstat en R para remover la tendencia mediante superficies polinómicas:
+
+- **Modelado de residuales (gstat):** Mientras que variogram(z \~ 1) asume una media constante (sin tendencia), especificar una fórmula como variogram(z \~ Este + Norte) remueve la tendencia previa y calcula el semivariograma basándose exclusivamente en los residuales (la variabilidad local pura).
+
+- **Superficie de primer orden (plano inclinado):** Ajusta un plano lineal $f(x, y) = \beta_0 + \beta_1 x + \beta_2 y$ con $3$ parámetros, ideal para capturar un gradiente uniforme y continuo en las coordenadas Este ($x$) y Norte ($y$)
+
+- **Superficie de segundo orden (curvatura espacial):** Incorpora $6$ parámetros $f(x, y) = \beta_0 + \beta_1 x + \beta_2 y + \beta_3 x^2 + \beta_4 y^2 + \beta_5 (x \times y)$ para modelar patrones parabólicos o de curvatura más complejos en la variación del fondo de la ciénaga.
+
+Haremos este procedimiento para cada una de las variables.
+
+### Variable Profundidad
+
+Dado que la profundidad presentó una tendencia lineal continua en el eje Este-Oeste, se aplicará una superficie de primer orden (z \~ Este + Norte) para remover el plano inclinado regional y trabajar únicamente con los residuales de la variabilidad del fondo. Veremos el ajuste sin remover tendencia, remoción lineal y cuadrática.
+
+```{r}
+v_sin_tendencia_prof <- v_prof
+v_1er_orden_prof <- variogram(prof ~ Este + Norte, datos_sf,
+                          cutoff = distancia_maxima, width = ancho_intervalo)
+v_2do_orden_prof <- variogram(prof ~ poly(Este, Norte, degree = 2), datos_sf,
+                          cutoff = distancia_maxima, width = ancho_intervalo)
+
+comparacion_tendencia_prof <- bind_rows(
+  v_sin_tendencia_prof %>% mutate(modelo = "Sin remover tendencia"),
+  v_1er_orden_prof     %>% mutate(modelo = "Tendencia 1er orden removida"),
+  v_2do_orden_prof     %>% mutate(modelo = "Tendencia 2do orden removida")
+)
+
+ggplot(comparacion_tendencia_prof, aes(x = dist, y = gamma, color = modelo)) +
+  geom_point() +
+  geom_line() +
+  scale_color_manual(values = c("grey40", "#3a7ca5", "#d9534f"), name = NULL) +
+  theme_test(base_size = 13) +
+  labs(x = "Distancia (m)", y = expression(hat(gamma)(h)),
+       title = "Efecto de remover la tendencia sobre el semivariograma") +
+  theme(legend.position = "bottom", axis.title = element_text(face = "bold"))
+```
+
+El gráfico compara el semivariograma empírico de la profundidad sin remover la tendencia (línea gris) frente a las curvas obtenidas tras sustraer superficies polinomiales de primer orden (línea azul) y segundo orden (línea roja). El semivariograma empírico de la profundidad confirma que no es adecuado remover la tendencia a gran escala, siendo preferible trabajar directamente con la variable original. Aunque sustraer una superficie de primer orden (línea azul) disminuye levemente la semivarianza a distancias intermedias, aplicar cualquier remoción de tendencia (de 1er o 2do orden) provoca que los residuales se disparen e inestabilize a distancias superiores a $25\ 000\text{ m}$, alcanzando valores de $\hat{\gamma}(h)$ por encima de $0.22$ y $0.27$. Este artefacto distorsiona la estructura espacial en los límites de la ciénaga. En consecuencia, mantener el semivariograma empírico original (línea gris) resulta la decisión más sólida, ya que preserva el comportamiento físico real del fondo del cuerpo de agua.
+
+### Variable Salinidad
+
+Para la salinidad, al no registrar un gradiente continuo general sino un foco de alta salinidad aislado en el nororiente, se evaluará la remoción de tendencia para comprobar si los residuales estabilizan la semivarianza a largas distancias y permiten modelar la variabilidad propia del cuerpo de agua principal. Veremos el ajuste sin remover tendencia, remoción lineal y cuadrática.
+
+```{r}
+v_sin_tendencia_sali <- v_sali
+v_1er_orden_sali <- variogram(sali ~ Este + Norte, datos_sf,
+                          cutoff = distancia_maxima, width = ancho_intervalo)
+v_2do_orden_sali <- variogram(sali ~ poly(Este, Norte, degree = 2), datos_sf,
+                          cutoff = distancia_maxima, width = ancho_intervalo)
+
+comparacion_tendencia_sali <- bind_rows(
+  v_sin_tendencia_sali %>% mutate(modelo = "Sin remover tendencia"),
+  v_1er_orden_sali     %>% mutate(modelo = "Tendencia 1er orden removida"),
+  v_2do_orden_sali     %>% mutate(modelo = "Tendencia 2do orden removida")
+)
+
+ggplot(comparacion_tendencia_sali, aes(x = dist, y = gamma, color = modelo)) +
+  geom_point() +
+  geom_line() +
+  scale_color_manual(values = c("grey40", "#3a7ca5", "#d9534f"), name = NULL) +
+  theme_test(base_size = 13) +
+  labs(x = "Distancia (m)", y = expression(hat(gamma)(h)),
+       title = "Efecto de remover la tendencia sobre el semivariograma") +
+  theme(legend.position = "bottom", axis.title = element_text(face = "bold"))
+```
+
+El análisis del semivariograma para la salinidad confirma que **tampoco es necesario ni adecuado remover la tendencia espacial**, siendo preferible conservar los datos originales. La remoción de primer orden (línea azul) es prácticamente idéntica a la curva sin remover tendencia (línea gris), lo que demuestra que un plano inclinado simple no aporta ningún ajuste real. Por otro lado, aunque la remoción de segundo orden (línea roja) aplana y reduce la semivarianza a distancias largas (de $80$ a cerca de $45$), este comportamiento no elimina el fuerte salto cuadrático a partir de los $20\ 000\text{ m}$. Dado que la variabilidad de la salinidad no responde a una tendencia gradual global sino al foco aislado de alta salinidad marina en el nororiente, forzar la remoción de un polinomio distorsionaría los datos reales del ecosistema sin corregir la causa del contraste local.
+
+### Variable Oxigeno
+
+Debido a la estructura espacial del oxígeno disuelto, que combina un incremento lineal en el eje Este con un patrón parabólico (domo) en el eje Norte, se utilizará una superficie de segundo orden (z \~ Este + Norte + I(Este\^2) + I(Norte\^2) + Este:Norte) para sustraer la curvatura regional y aislar los residuales locales. Veremos el ajuste sin remover tendencia, remoción lineal y cuadrática.
+
+```{r}
+v_sin_tendencia_oxig <- v_oxig
+v_1er_orden_oxig <- variogram(oxig ~ Este + Norte, datos_sf,
+                          cutoff = distancia_maxima, width = ancho_intervalo)
+v_2do_orden_oxig <- variogram(oxig ~ poly(Este, Norte, degree = 2), datos_sf,
+                          cutoff = distancia_maxima, width = ancho_intervalo)
+
+comparacion_tendencia_oxig <- bind_rows(
+  v_sin_tendencia_oxig %>% mutate(modelo = "Sin remover tendencia"),
+  v_1er_orden_oxig     %>% mutate(modelo = "Tendencia 1er orden removida"),
+  v_2do_orden_oxig     %>% mutate(modelo = "Tendencia 2do orden removida")
+)
+
+ggplot(comparacion_tendencia_oxig, aes(x = dist, y = gamma, color = modelo)) +
+  geom_point() +
+  geom_line() +
+  scale_color_manual(values = c("grey40", "#3a7ca5", "#d9534f"), name = NULL) +
+  theme_test(base_size = 13) +
+  labs(x = "Distancia (m)", y = expression(hat(gamma)(h)),
+       title = "Efecto de remover la tendencia sobre el semivariograma") +
+  theme(legend.position = "bottom", axis.title = element_text(face = "bold"))
+```
+
+El semivariograma empírico del oxígeno disuelto evidencia un resultado claro: **quitar la tendencia con una curva (de segundo orden) sí es necesario**, a diferencia de lo que pasó con las otras variables. Si se quita solo una línea recta (línea azul), el gráfico sigue mostrando la misma "montaña" o pico alto (cerca de $14$) que la curva original (línea gris). En cambio, al usar la corrección de segundo orden (línea roja), esa gran "montaña" desaparece, bajando el punto máximo a solo $5.5$ y dejando los datos mucho más parejos y suaves a lo largo de la ciénaga. En conclusión, para el oxígeno disuelto sí vale la pena limpiar esta tendencia en forma de curva antes de continuar con el análisis.
+
+```{r}
+datos_sf$prof_sin_tendencia <- residuals(lm(prof ~ Este + Norte, data = datos_sf))
+datos.cienaga$prof_sin_tendencia <- residuals(lm(prof ~ Este + Norte, data = datos.cienaga))
+```
+
+```{r}
+datos_sf$sali_sin_tendencia <- residuals(lm(sali ~ Este + Norte, data = datos_sf))
+datos.cienaga$sali_sin_tendencia <- residuals(lm(sali ~ Este + Norte, data = datos.cienaga))
+```
+
+```{r}
+datos_sf$oxig_sin_tendencia <- residuals(lm(oxig ~ poly(Este, Norte, degree = 2), data = datos_sf))
+datos.cienaga$oxig_sin_tendencia <- residuals(lm(oxig ~ poly(Este, Norte, degree = 2), data = datos.cienaga))
+```
+
+## Normalidad de las variables
+
+El estimador clásico (de momentos) del semivariograma no exige que las variables sigan una distribución normal, pero una desviación marcada de la normalidad es una señal de alerta que suele indicar la presencia de subregiones contrastantes o de una estructura regional subyacente. Evaluar la distribución marginal de la profundidad, la salinidad y el oxígeno disuelto antes de tomar la decisión final sobre la remoción de la tendencia resulta clave por dos razones principales: en primer lugar, permite comprender si el comportamiento asimétrico responde a patrones espaciales a gran escala —lo cual justifica haber optado por mantener los datos originales en la profundidad y la salinidad, frente a remover la tendencia cuadrática en el oxígeno disuelto— y, en segundo lugar, ofrece el criterio definitivo para determinar si es conveniente utilizar un estimador robusto del semivariograma en lugar del clásico para amortiguar el impacto de valores atípicos
+
+### Variable Profundidad
+
+El histograma y el gráfico Q-Q evalúan la simetría de la profundidad para verificar si se aproxima a una distribución normal o si refleja la pendiente gradual propia del fondo de la ciénaga.
+
+```{r}
+# 1. Gráfico de Histograma
+p1_prof <- ggplot(datos.cienaga, aes(x = prof)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 12, fill = "#3a7ca5", color = "white") +
+  geom_density(color = "darkred", linewidth = 1) +
+  theme_test(base_size = 13) +
+  labs(x = "Profundidad en Metros", y = "Densidad", title = "Histograma") +
+  theme(axis.title = element_text(face = "bold"))
+
+# 2. Gráfico Q-Q
+p2_prof <- ggplot(datos.cienaga, aes(sample = prof)) +
+  stat_qq() +
+  stat_qq_line(color = "darkred") +
+  theme_test(base_size = 13) +
+  labs(x = "Cuantiles teóricos (Normal)", y = "Cuantiles muestrales",
+       title = "Gráfico cuantil-cuantil (Q-Q)") +
+  theme(axis.title = element_text(face = "bold"))
+
+# 3. Panel combinado en 1 fila y 2 columnas
+panel_profundidad <- p1_prof + p2_prof + 
+  plot_annotation(
+    title = "Diagnóstico de normalidad — Profundidad",
+    theme = theme(plot.title = element_text(face = "bold", size = 15))
+  )
+
+# Mostrar en consola / renderizar
+panel_profundidad
+```
+
+```{r}
+shapiro_prof <- shapiro.test(datos.cienaga$prof)
+shapiro_prof
+```
+
+```{r}
+asimetria_prof <- mean((datos.cienaga$prof - mean(datos.cienaga$prof))^3) / sd(datos.cienaga$prof)^3
+asimetria_prof
+```
+
+El diagnóstico de normalidad para la profundidad muestra una ligera asimetría hacia la izquierda (coeficiente de asimetría de $-0.817$), reflejada en el histograma por una mayor concentración de datos entre $1.4$ y $1.8\text{ m}$ y una cola de valores menores hacia el lado izquierdo. Esta desviación se confirma en el gráfico Q-Q, donde los puntos de las profundidades más bajas se alejan visiblemente de la línea de referencia roja, y se ratifica estadísticamente con el test de Shapiro-Wilk ($W = 0.9444$, $p = 0.000131$), permitiendo rechazar la hipótesis de normalidad. En conclusión, aunque la profundidad no sigue una distribución normal perfecta, la falta de normalidad es moderada y responde al gradiente natural del fondo del agua, sugiriendo evaluar estimadores robustos o trabajar con precaución sobre el estimador clásico del semivariograma
+
+### Variable Salinidad
+
+En la salinidad, ambas gráficas permiten identificar si los datos se distribuyen de forma uniforme en la mayor parte del cuerpo de agua o si la concentración atípica del nororiente genera un sesgo marcado en la distribución marginal.
+
+```{r}
+# 1. Gráfico de Histograma
+p1_sali <- ggplot(datos.cienaga, aes(x = sali)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 12, fill = "#3a7ca5", color = "white") +
+  geom_density(color = "darkred", linewidth = 1) +
+  theme_test(base_size = 13) +
+  labs(x = "Salinidad", y = "Densidad", title = "Histograma") +
+  theme(axis.title = element_text(face = "bold"))
+
+# 2. Gráfico Q-Q
+p2_sali <- ggplot(datos.cienaga, aes(sample = sali)) +
+  stat_qq() +
+  stat_qq_line(color = "darkred") +
+  theme_test(base_size = 13) +
+  labs(x = "Cuantiles teóricos (Normal)", y = "Cuantiles muestrales",
+       title = "Gráfico cuantil-cuantil (Q-Q)") +
+  theme(axis.title = element_text(face = "bold"))
+
+# 3. Panel combinado en 1 fila y 2 columnas
+panel_sali <- p1_sali + p2_sali + 
+  plot_annotation(
+    title = "Diagnóstico de normalidad — Salinidad",
+    theme = theme(plot.title = element_text(face = "bold", size = 15))
+  )
+
+# Mostrar en consola / renderizar
+panel_sali
+```
+
+```{r}
+shapiro_sali <- shapiro.test(datos.cienaga$sali)
+shapiro_sali
+```
+
+```{r}
+asimetria_sali <- mean((datos.cienaga$sali - mean(datos.cienaga$sali))^3) / sd(datos.cienaga$sali)^3
+asimetria_sali
+```
+
+El diagnóstico de normalidad para la salinidad revela una fuerte asimetría positiva a la derecha (coeficiente de asimetría de $4.033$), evidenciada en el histograma por una alta concentración de datos en valores bajos (entre $15$ y $20$) y una cola derecha con observaciones muy distantes (superiores a $25$ y $30$). Esta marcada desviación se confirma en el gráfico Q-Q, donde la mayoría de los puntos siguen la línea de referencia pero el grupo de datos atípicos más altos se dispara drásticamente en la parte superior, lo cual se ratifica estadísticamente con el test de Shapiro-Wilk ($W = 0.59716$, $p = 3.374 \times 10^{-16}$) que rechaza la normalidad. En conclusión, la salinidad no sigue una distribución normal debido al efecto del foco aislado de alta intrusión marina en el nororiente, lo que respalda técnicamente el uso de un estimador robusto para el semivariograma en lugar del estimador clásico de momentos.
+
+### Variable Oxigeno
+
+Para el oxígeno disuelto, la combinación del histograma y el gráfico Q-Q ayuda a detectar la presencia de una distribución bimodal o asimétrica, provocada por el fuerte contraste entre el centro hiperoxigenado y los extremos con concentraciones bajas.
+
+```{r}
+# 1. Gráfico de Histograma
+p1_oxig <- ggplot(datos.cienaga, aes(x = oxig_sin_tendencia)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 12, fill = "#3a7ca5", color = "white") +
+  geom_density(color = "darkred", linewidth = 1) +
+  theme_test(base_size = 13) +
+  labs(x = "Oxigeno", y = "Densidad", title = "Histograma") +
+  theme(axis.title = element_text(face = "bold"))
+
+# 2. Gráfico Q-Q
+p2_oxig <- ggplot(datos.cienaga, aes(sample = oxig_sin_tendencia)) +
+  stat_qq() +
+  stat_qq_line(color = "darkred") +
+  theme_test(base_size = 13) +
+  labs(x = "Cuantiles teóricos (Normal)", y = "Cuantiles muestrales",
+       title = "Gráfico cuantil-cuantil (Q-Q)") +
+  theme(axis.title = element_text(face = "bold"))
+
+# 3. Panel combinado en 1 fila y 2 columnas
+panel_oxig <- p1_oxig + p2_oxig + 
+  plot_annotation(
+    title = "Diagnóstico de normalidad — Oxigenación",
+    theme = theme(plot.title = element_text(face = "bold", size = 15))
+  )
+
+# Mostrar en consola / renderizar
+panel_oxig
+```
+
+```{r}
+shapiro_oxig <- shapiro.test(datos.cienaga$oxig_sin_tendencia)
+shapiro_oxig
+```
+
+```{r}
+asimetria_oxig <- mean((datos.cienaga$oxig_sin_tendencia - mean(datos.cienaga$oxig_sin_tendencia))^3) / sd(datos.cienaga$oxig_sin_tendencia)^3
+asimetria_oxig
+```
+
+El diagnóstico de normalidad para los residuales del oxígeno disuelto (tras remover la tendencia cuadrática) muestra una leve asimetría positiva a la derecha (coeficiente de asimetría de $0.420$), apreciable en el histograma por un pico central centrado cerca de $-1$ y una cola levemente extendida hacia la derecha con un pequeño segundo pico alrededor de $4$. En el gráfico Q-Q, los residuales siguen de forma muy ajustada la línea de referencia roja en el centro (entre cuantiles $-1.5$ y $1$), alejándose levemente solo en los extremos superiores. Aunque la prueba de Shapiro-Wilk resulta estadísticamente significativa ($W = 0.97417$, $p = 0.02633$) y rechaza formalmente la normalidad estricta, el comportamiento de los datos se aproxima considerablemente a una distribución normal gracias a la remoción previa de la curvatura a gran escala.
+
+## Anisotropía: semivariogramas direccionales
+
+Hasta el momento hemos supuesto que la variabilidad espacial es igual en todas las direcciones (isotropía), dependiendo únicamente de la distancia entre puntos. Sin embargo, en un cuerpo de agua alargado como la Ciénaga Grande de Santa Marta, es natural esperar que la relación espacial cambie a lo largo de su eje principal en comparación con la dirección transversal. En concordancia con las decisiones tomadas previamente —manteniendo los datos originales para la profundidad y la salinidad, y trabajando sobre los residuales sin tendencia de segundo orden para el oxígeno disuelto—, evaluaremos la presencia de anisotropía calculando los semivariogramas direccionales en cuatro ángulos clave (0°, 45°, 90° y 135°):
+
+### Variable Profundidad
+
+Calcularemos los semivariogramas direccionales sobre los datos originales para verificar si la pendiente gradual del fondo altera la continuidad espacial según la orientación.
+
+```{r}
+v_direccional_prof <- variogram(prof ~ 1, datos_sf,
+                            alpha = c(0, 45, 90, 135), cutoff = distancia_maxima)
+
+ggplot(v_direccional_prof, aes(x = dist, y = gamma, color = factor(dir.hor))) +
+  geom_point() +
+  geom_line() +
+  scale_color_viridis_d(name = "Dirección (°)") +
+  theme_test(base_size = 13) +
+  labs(x = "Distancia (m)", y = expression(hat(gamma)(h)),
+       title = "Semivariogramas direccionales — profundidad") +
+  theme(axis.title = element_text(face = "bold"))
+```
+
+El semivariograma direccional para la profundidad muestra anisotropía, ya que las curvas cambian de forma según la orientación. Aunque en las distancias cortas (menores a $10\ 000\text{ m}$) las cuatro direcciones avanzan juntas y parejas, a partir de ese punto se separan claramente: la dirección a 90° (Este-Oeste, línea verde) sube muy rápido y alcanza el punto más alto (por encima de $0.45$), lo que coincide con el cambio gradual de profundidad que hay de un extremo a otro de la ciénaga. En cambio, la dirección a 45° (línea azul) se mantiene bajita y plana cerca de $0.15$. Esto demuestra que la profundidad no varía igual hacia todos los lados.
+
+### Variable Salinidad
+
+Evaluaremos los datos originales en las cuatro direcciones para comprobar si la fuerte influencia marina en el nororiente genera anisotropía o si la variabilidad se mantiene uniforme en el resto del cuerpo de agua.
+
+```{r}
+v_direccional_sali <- variogram(sali ~ 1, datos_sf,
+                            alpha = c(0, 45, 90, 135), cutoff = distancia_maxima)
+
+ggplot(v_direccional_sali, aes(x = dist, y = gamma, color = factor(dir.hor))) +
+  geom_point() +
+  geom_line() +
+  scale_color_viridis_d(name = "Dirección (°)") +
+  theme_test(base_size = 13) +
+  labs(x = "Distancia (m)", y = expression(hat(gamma)(h)),
+       title = "Semivariogramas direccionales — salinidad") +
+  theme(axis.title = element_text(face = "bold"))
+```
+
+El semivariograma direccional para la salinidad muestra una anisotropía muy marcada, ya que el comportamiento de los datos cambia drásticamente según la dirección. Mientras que en la dirección 135° (línea amarilla) la curva se queda totalmente plana y pegada a cero, en las direcciones a 90° (línea verde) y 45° (línea azul) la semivarianza se dispara muy rápido después de los $15\ 000\text{ m}$, superando valores de $80$. Por su parte, la dirección 0° (Norte-Sur, línea morada) sigue baja pero da un salto repentino al final. Esta gran diferencia confirma que la salinidad no es pareja y está completamente dominada por la zona de alta salinidad marina en el nororiente de la ciénaga.
+
+### Variable Oxigeno
+
+Analizaremos los semivariogramas direccionales utilizando los residuales (tras sustraer la tendencia cuadrática) para confirmar si, una vez corregida la curvatura regional, la variabilidad local responde de forma isotrópica.
+
+```{r}
+v_direccional_oxig <- variogram(oxig_sin_tendencia ~ 1, datos_sf,
+                            alpha = c(0, 45, 90, 135), cutoff = distancia_maxima)
+
+ggplot(v_direccional_oxig, aes(x = dist, y = gamma, color = factor(dir.hor))) +
+  geom_point() +
+  geom_line() +
+  scale_color_viridis_d(name = "Dirección (°)") +
+  theme_test(base_size = 13) +
+  labs(x = "Distancia (m)", y = expression(hat(gamma)(h)),
+       title = "Semivariogramas direccionales — oxigeno") +
+  theme(axis.title = element_text(face = "bold"))
+```
+
+El semivariograma direccional del oxígeno disuelto muestra **anisotropía**, ya que las curvas cambian bastante de forma según la dirección. En las direcciones 0° (Norte-Sur, curva morada) y 135° (línea amarilla), los datos suben muy rápido y forman una "montaña" o pico alto cercano a $7.5$ antes de los $10\ 000\text{ m}$. En cambio, en la dirección a 90° (Este-Oeste, línea verde), el gráfico es mucho más bajo y plano, sin superar el valor de $4.5$. Además, la curva de 135° vuelve a dispararse hacia arriba al final en las distancias largas. Estas diferencias demuestran que el oxígeno disuelto no se comporta de la misma manera hacia todos los lados y cambia según la dirección en que se mida dentro de la ciénaga.
+
+## Envolvente de aleatorización Monte Carlo
+
+Esta prueba sirve para comprobar si de verdad existe un patrón espacial en los datos o si todo es fruto del azar. Para lograrlo, se compara el semivariograma real con muchos semivariogramas generados al mezclar aleatoriamente los valores entre los puntos de muestreo. Como la librería `gstat` no trae una función automática para esto, la construimos manualmente paso a paso, lo cual permite entender de forma muy clara cómo funciona el procedimiento.
+
+```{r}
+set.seed(2026)
+n_simulaciones <- 199
+
+# 1. Definir matrices para guardar los resultados de cada variable
+n_lags <- nrow(v_prof) # o nrow(v_sin_tendencia_prof)
+envolvente_sim_prof <- matrix(NA_real_, nrow = n_lags, ncol = n_simulaciones)
+envolvente_sim_sali <- matrix(NA_real_, nrow = n_lags, ncol = n_simulaciones)
+envolvente_sim_oxig <- matrix(NA_real_, nrow = n_lags, ncol = n_simulaciones)
+
+datos_sf_perm <- datos_sf
+
+# 2. Bucle de aleatorización Monte Carlo
+for (i in seq_len(n_simulaciones)) {
+  
+  # Permutación aleatoria de los valores
+  datos_sf_perm$prof_perm <- sample(datos.cienaga$prof)
+  datos_sf_perm$sali_perm <- sample(datos.cienaga$sali)
+  # OJO: Para oxígeno permutamos el residual sin tendencia
+  datos_sf_perm$oxig_perm <- sample(datos.cienaga$oxig_sin_tendencia) 
+  
+  # Recálculo de semivariogramas empíricos
+  v_perm_prof <- variogram(prof_perm ~ 1, datos_sf_perm, cutoff = distancia_maxima, width = ancho_intervalo)
+  v_perm_sali <- variogram(sali_perm ~ 1, datos_sf_perm, cutoff = distancia_maxima, width = ancho_intervalo)
+  v_perm_oxig <- variogram(oxig_perm ~ 1, datos_sf_perm, cutoff = distancia_maxima, width = ancho_intervalo)
+  
+  # Guardar los valores de semivarianza en sus respectivas matrices
+  envolvente_sim_prof[, i] <- v_perm_prof$gamma
+  envolvente_sim_sali[, i] <- v_perm_sali$gamma
+  envolvente_sim_oxig[, i] <- v_perm_oxig$gamma
+}
+
+# 3. Construcción de los tibbles finales para cada variable (mínimo y máximo)
+envolvente_prof <- tibble(
+  dist  = v_prof$dist,
+  gamma = v_prof$gamma,
+  inf   = apply(envolvente_sim_prof, 1, min),
+  sup   = apply(envolvente_sim_prof, 1, max)
+  ) %>% mutate(fuera_envolvente = gamma < inf | gamma > sup)
+
+envolvente_sali <- tibble(
+  dist  = v_sali$dist,
+  gamma = v_sali$gamma,
+  inf   = apply(envolvente_sim_sali, 1, min),
+  sup   = apply(envolvente_sim_sali, 1, max)
+  ) %>% mutate(fuera_envolvente = gamma < inf | gamma > sup)
+
+envolvente_oxig <- tibble(
+  dist  = v_oxig$dist,
+  gamma = v_oxig$gamma,
+  inf   = apply(envolvente_sim_oxig, 1, min),
+  sup   = apply(envolvente_sim_oxig, 1, max)
+  ) %>% mutate(fuera_envolvente = gamma < inf | gamma > sup)
+```
+
+```{r}
+# 1. Gráfico Monte Carlo — Profundidad
+p_prof <- ggplot(envolvente_prof, aes(x = dist)) +
+  geom_ribbon(aes(ymin = inf, ymax = sup), fill = "grey80", alpha = 0.6) +
+  geom_line(aes(y = gamma), color = "#d9534f", linewidth = 1) +
+  geom_point(aes(y = gamma), color = "#d9534f", size = 2) +
+  theme_test(base_size = 12) +
+  labs(x = "Distancia (m)", y = expression(hat(gamma)(h)),
+       subtitle = "Profundidad (datos originales)") +
+  theme(axis.title = element_text(face = "bold"),
+        plot.subtitle = element_text(face = "bold", size = 11))
+
+# 2. Gráfico Monte Carlo — Salinidad
+p_sali <- ggplot(envolvente_sali, aes(x = dist)) +
+  geom_ribbon(aes(ymin = inf, ymax = sup), fill = "grey80", alpha = 0.6) +
+  geom_line(aes(y = gamma), color = "#d9534f", linewidth = 1) +
+  geom_point(aes(y = gamma), color = "#d9534f", size = 2) +
+  theme_test(base_size = 12) +
+  labs(x = "Distancia (m)", y = expression(hat(gamma)(h)),
+       subtitle = "Salinidad (datos originales)") +
+  theme(axis.title = element_text(face = "bold"),
+        plot.subtitle = element_text(face = "bold", size = 11))
+
+# 3. Gráfico Monte Carlo — Oxígeno Disuelto
+p_oxig <- ggplot(envolvente_oxig, aes(x = dist)) +
+  geom_ribbon(aes(ymin = inf, ymax = sup), fill = "grey80", alpha = 0.6) +
+  geom_line(aes(y = gamma), color = "#d9534f", linewidth = 1) +
+  geom_point(aes(y = gamma), color = "#d9534f", size = 2) +
+  theme_test(base_size = 12) +
+  labs(x = "Distancia (m)", y = expression(hat(gamma)(h)),
+       subtitle = "Oxígeno disuelto (residuales sin tendencia)") +
+  theme(axis.title = element_text(face = "bold"),
+        plot.subtitle = element_text(face = "bold", size = 11))
+
+# 4. Combinación en un solo panel
+panel_envolventes <- (p_prof | p_sali | p_oxig) +
+  plot_annotation(
+    title = "Semivariogramas observados (rojo) vs. Envolventes de aleatorización Monte Carlo (gris)",
+    theme = theme(plot.title = element_text(face = "bold", size = 14, hjust = 0.5))
+  )
+
+# Mostrar panel
+panel_envolventes
+```
+
+```{r}
+cat("Proporción de intervalos de distancia donde el semivariograma observado",
+    "\ncae fuera de la envolvente de aleatorización en la profundidad:",
+    scales::percent(mean(envolvente_prof$fuera_envolvente)), "\n")
+```
+
+La profundidad muestra una dependencia espacial moderada, ya que la línea roja se sale de la franja gris de aleatoriedad en el 50 % de las distancias. En las distancias cortas (hasta los 15 000 m), la curva se ubica por debajo de la envolvente (indicando que los puntos cercanos son más parecidos entre sí de lo que ocurriría por puro azar), mientras que a distancias largas vuelve a entrar en la banda gris debido a la alta incertidumbre en los bordes de la ciénaga.
+
+```{r}
+cat("Proporción de intervalos de distancia donde el semivariograma observado",
+    "\ncae fuera de la envolvente de aleatorización en la salinidad:",
+    scales::percent(mean(envolvente_sali$fuera_envolvente)), "\n")
+```
+
+La salinidad presenta una estructura espacial clara a grandes distancias, superando la envolvente en el 58 % de los intervalos. Aunque en distancias cortas y medias la línea roja se mantiene dentro o por debajo de la franja gris, a partir de los 20 000 m se dispara drásticamente hacia arriba por fuera de la sombra, lo que confirma la fuerte influencia del foco aislado de alta salinidad en el nororiente
+
+```{r}
+cat("Proporción de intervalos de distancia donde el semivariograma observado",
+    "\ncae fuera de la envolvente de aleatorización en la oxigenación:",
+    scales::percent(mean(envolvente_oxig$fuera_envolvente)), "\n")
+```
+
+El oxígeno disuelto es la variable con mayor estructura espacial, saliéndose de la envolvente en un 75 % de los puntos. La línea roja forma una gran "montaña" que supera ampliamente el límite superior de la franja gris entre los 5 000 y 25 000 m, demostrando que la variación de esta variable responde a un patrón espacial muy marcado y no a una distribución aleatoria.
