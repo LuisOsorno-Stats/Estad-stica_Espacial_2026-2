@@ -1,0 +1,146 @@
+---
+lang: es
+toc: true
+number-sections: true
+toc-title: "Índice General"
+crossref:
+  lof-title: "Índice de Figuras"
+  lot-title: "Índice de Tablas"
+bibliography: bib/referencias.bib
+bibliographystyle: apa                  # Utiliza estilo de citacion APA
+nocite: '@*'                            # Agrega la bibliografia no citada
+format: 
+  pdf: 
+    pdf-engine: pdflatex
+    documentclass: article
+    include-before-body: latex_paginatitulo_plantilla_iam.tex
+    lof: true
+    lot: true
+    include-in-header:
+      text: |
+        \usepackage{etoolbox}
+        \apptocmd{\tableofcontents}{\clearpage}{}{}
+        \pretocmd{\listoftables}{\clearpage}{}{}
+        \apptocmd{\listoftables}{\newpage}{}{}
+    geometry:
+      - top=30mm
+      - left=15mm
+      - bottom=30mm
+      - right=15mm
+      - heightrounded
+    mainfont: "Times New Roman"
+    fontsize: 10pt
+    colorlinks: true                     
+    fig-pos: "H"
+editor: source
+---
+
+```{r setup, include = F}
+knitr::opts_chunk$set(fig.path = 'figurasR/',
+                      echo = FALSE, warning = FALSE, message = FALSE,
+                      fig.align = "center", out.width = "70%",
+                      cache = FALSE, comment = NA)
+```
+
+```{r}
+# Limpieza del ambiente
+
+rm(list = ls())
+
+# Cargado de las librerias
+
+library(tidyverse)
+
+
+
+
+
+
+# Cargado de la base de datos
+
+path = ""
+
+datos <- read.csv(path)
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Abstract
+
+
+
+
+
+
+
+
+
+# Introducción
+
+
+
+
+
+
+
+
+# Pregunta de investigación
+
+
+
+
+
+
+
+
+
+# Metodología
+
+
+
+
+
+
+## Análisis descriptivo
+
+
+**Cobertura de Internet fijo**
+
+Tiene muchas covariables interesantes
+
+https://www.datos.gov.co/Ciencia-Tecnolog-a-e-Innovaci-n/Internet-Fijo-Accesos-por-tecnolog-a-y-segmento/n48w-gutb/data_preview
+
+
+Preguntas candidatas
+
+¿De qué manera la competencia entre operadores, el nivel inicial de penetración y la estructura socioeconómica de los usuarios explicaron el crecimiento de los accesos residenciales a internet fijo entre 2019-4T y 2021-4T en Colombia, y existió un efecto de desbordamiento espacial hacia los municipios vecinos?
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

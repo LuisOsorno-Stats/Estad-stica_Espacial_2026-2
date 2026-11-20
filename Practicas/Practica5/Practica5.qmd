@@ -1,0 +1,304 @@
+---
+title: "Práctica 4 de estadística espacial"
+date: today
+author:
+  - name: "Nombre: Luis Gabriel Osorno Muñoz, CC: 1032456789"
+    affiliation: "Universidad Nacional de Colombia - Sede Medellín, Facultad de Ciencias"
+format:
+  typst:
+    mainfont: "Liberation Sans"
+execute:
+  knitr:
+    opts_chunk:
+      dev: "cairo_pdf"
+      dpi: 300
+always_allow_html: true
+editor: visual
+---
+
+# Introducción
+
+El objetivo de esta práctica es implementar Kriging Ordinario (KO) y Kriging Universal (KU) con gstat::krige(), utilizando mallas espaciales delimitadas mediante la librería sf. El enfoque principal está en comparar ambos métodos, visualizando sus mapas de predicción e incertidumbre, y reconociendo cómo la presencia de una tendencia espacial hace que KO y KU difieran drásticamente, especialmente al extrapolar fuera del área muestreada.
+
+Por último, se evaluará el desempeño predictivo de los modelos mediante validación cruzada leave-one-out (analizando métricas como RMSE, correlación y residuales estandarizados). Con esto distinguiremos la precisión predictiva de un modelo frente a la interpretabilidad de sus parámetros del semivariograma.
+
+# Preparación del entorno
+
+Preparamos el entorno, cargando las librerias necesarias para la ejecución y agregando un comando que limpie el entorno.
+
+```{r}
+# Limpieza del entorno
+
+rm(list = ls())
+
+# Cargado de las librerias
+
+library(sf)
+library(gstat)
+library(tidyverse)
+library(knitr)
+library(scales)
+library(patchwork)
+```
+
+# Kriging sobre datos simulados
+
+El objetivo de esta sección es evaluar la capacidad predictiva del Kriging a partir de los campos espaciales simulados. Para ello, se emplea una estructura de covarianza Gaussiana definida por un efecto pepita (nugget) de $2$, una meseta (sill) de $16$ y un parámetro de rango de $15$, lo que representa un rango efectivo de $a_{\text{efectivo}} = 15\sqrt{3} \approx 25.98$ unidades de distancia. Los semivariogramas son ajustados mediante mínimos cuadrados ponderados (WLS). Se analizan dos escenarios de media espacial: un modelo estacionario con media constante ($\mu = 45$) y un modelo no estacionario que incorpora una tendencia cuadrática de la forma $z(x,y) = 12 - 3x + 7y - 5xy$.
+
+## Campos simulados y sus modelos de semivariograma
+
+Los datos se simularán sobre una malla regular de $15 \times 15$ ($N = 225$ puntos) en un dominio coordenado $[0, 15] \times [0, 15]$, fijando una semilla aleatoria (set.seed()) para garantizar la reproducibilidad.Sobre estas ubicaciones se generan las dos realizaciones del campo aleatorio gaussiano y se calcula su semivariograma empírico mediante gstat::variogram(). Este paso permite ajustar y validar la estructura espacial teórica mediante mínimos cuadrados ponderados (WLS) como insumo directo para la interpolación.
+
+```{r}
+grid <- expand.grid(x = 0:14, y = 0:14)
+modelo_gau_true <- vgm(psill = 16, model = "Gau", range = 15, nugget = 2)
+
+set.seed(2026)
+distancia  <- as.matrix(dist(grid))
+covarianza <- 16 * exp(- (distancia / 15)**2)
+diag(covarianza) <- 18
+invisible(MASS::mvrnorm(1, rep(45, nrow(grid)), covarianza))  # mantiene el estado del RNG igual que en la Práctica 4
+
+g_cte  <- gstat(formula = z ~ 1, locations = ~x + y, dummy = TRUE, beta = 45,
+                model = modelo_gau_true, nmax = 100)
+sim_cte <- predict(g_cte, newdata = grid, nsim = 1)$sim1
+```
+
+```{r}
+invisible(MASS::mvrnorm(1, 12 - 3*grid$x + 7*grid$y-5*grid$x*grid$y-2*grid$x^2+
+                          grid$y^2, covarianza))
+g_ncte <- gstat(formula = z ~ x + y+x:y+x^2+y^2, locations = ~x + y,
+                dummy = TRUE, beta = c(12, -3, 7, -5, -2, 1),
+                model = modelo_gau_true, nmax = 100)
+sim_ncte <- predict(g_ncte, newdata = grid, nsim = 1)$sim1
+```
+
+```{r}
+sf_cte  <- st_as_sf(tibble(x = grid$x, y = grid$y, z = sim_cte),  coords = c("x", "y"), remove = FALSE)
+sf_ncte <- st_as_sf(tibble(x = grid$x, y = grid$y, z = sim_ncte), coords = c("x", "y"), remove = FALSE)
+```
+
+```{r}
+v_cte  <- variogram(z ~ 1,     sf_cte,  cutoff = 30, width = 1)
+v_ncte <- variogram(z ~ x + y + x:y+x^2+y^2, sf_ncte, cutoff = 30, width = 1)
+
+modelo_cte_fit  <- fit.variogram(v_cte,  vgm(psill = 15, model = "Gau", range = 10, nugget = 1.5))
+modelo_ncte_fit <- fit.variogram(v_ncte, vgm(psill = 15, model = "Gau", range = 10, nugget = 1.5))
+```
+
+La idea de lo que estamos haciendo es simular dos campos aleatorios Gaussianos sobre una malla espacial regular de $15 \times 15$ puntos utilizando la estructura de covarianza teórica definida (meseta de 16, rango de 15 y *nugget* de 2), diferenciados en que uno posee una media constante de 45 y el otro incorpora una tendencia cuadrática determinística. Posteriormente, los datos simulados se convierten a formato espacial vectorial (`sf`) conservando sus coordenadas explícitas para calcular el semivariograma empírico de cada escenario —extrayendo la tendencia en el caso no constante—. Finalmente, se ajusta un modelo de semivariograma teórico a cada variograma empírico mediante mínimos cuadrados ponderados (`fit.variogram`), dejando ambas estructuras espaciales listas como insumo base para ejecutar la interpolación por Kriging ordinario y universal.
+
+## Una malla de predicción con zona de extrapolación
+
+Para que la comparación entre Kriging ordinario (KO) y Kriging universal (KU) sea realmente informativa, la malla de predicción no debe limitarse al mismo dominio muestreado de $[0, 14] \times [0, 14]$ (donde se simularon los $15 \times 15 = 225$ puntos). Dentro de esa región bien observada, cualquier interpolador espacial razonable —con o sin tendencia explícita— tiende a ceñirse de cerca a los datos locales. Las divergencias fundamentales entre KO y KU emergen al extrapolar fuera de la zona muestreada: mientras KO decae suavemente hacia la media global constante, KU proyecta la tendencia polinomial hacia los bordes, lo que puede incrementar drásticamente la incertidumbre y alterar los valores predichos. Por esta razón, la malla de evaluación se extiende más allá del dominio original hacia $[-7, 22] \times [-7, 22]$:
+
+```{r}
+malla_sim <- expand.grid(x = seq(-7, 22, by = 0.5), y = seq(-7, 22, by = 0.5))
+malla_sim$zona <- ifelse(malla_sim$x < 0 | malla_sim$x > 14 
+                         | malla_sim$y < 0 | malla_sim$y > 14,
+                         "Extrapolación", "Interpolación")
+malla_sim_sf <- st_as_sf(malla_sim, coords = c("x", "y"), remove = FALSE)
+```
+
+```{r}
+ggplot() +
+  geom_tile(data = malla_sim, aes(x, y, fill = zona), alpha = 0.3) +
+  geom_point(data = grid, aes(x, y), color = "black", size = 1.2) +
+  coord_equal() + theme_test(base_size = 13) +
+  scale_fill_manual(values = c("Interpolación" = "#3a7ca5", "Extrapolación" = "#d9534f"), name = NULL) +
+  labs(title = "Malla de predicción: puntos muestreados", x = "x", y = "y")
+```
+
+Como se aprecia en la figura, la delimitación entre la zona de interpolación (el cuadrado interior $[0,14] \times [0,14]$ cubierto por los puntos de muestreo) y el anillo de extrapolación (el marco exterior $[-7,22] \times [-7,22]$ desprovisto de datos) ilustra con claridad la región de exploración.
+
+###  Media constante: Kriging ordinario
+
+Cuando asumimos que la media no cambia y se mantiene igual en todas partes, el **Kriging Ordinario (KO)** es la mejor opción para predecir.En esta sección vamos a probar qué tan bien predice KO para reconstruir los datos. También veremos qué pasa al salirnos de la zona con datos: notaremos cómo la incertidumbre de la predicción va aumentando gradualmente hasta quedarse cerca del promedio general a medida que nos alejamos del área muestreada.
+
+```{r}
+ko_cte <- krige(z ~ 1, sf_cte, malla_sim_sf, model = modelo_cte_fit)
+```
+
+```{r}
+malla_sim$ko_cte_pred <- ko_cte$var1.pred
+malla_sim$ko_cte_sd   <- sqrt(pmax(ko_cte$var1.var, 0))  # pmax evita NaN por varianzas negativas de redondeo en los puntos muestreados
+```
+
+
+```{r}
+p1 <- ggplot(malla_sim, aes(x, y, fill = ko_cte_pred)) + geom_raster() +
+  geom_point(data = grid, aes(x, y), inherit.aes = FALSE, size = 0.6) +
+  scale_fill_viridis_c(name = "Predicción") + coord_equal() + theme_test(base_size = 13) +
+  labs(title = "Kriging ordinario \n media constante")
+p2 <- ggplot(malla_sim, aes(x, y, fill = ko_cte_sd)) + geom_raster() +
+  geom_point(data = grid, aes(x, y), inherit.aes = FALSE, size = 0.6) +
+  scale_fill_viridis_c(name = "D.E.", option = "magma") + coord_equal() + theme_test(base_size = 13) +
+  labs(title = "Desviación estándar \n de Kriging")
+
+p1+p2
+```
+
+Dentro del cuadrado donde están los datos ($[0,14]$), el Kriging Ordinario funciona muy bien y se pega a los valores que medimos. Sin embargo, al salirnos a la parte de afuera (extendida hasta $[-7]$ y $[22]$), la predicción deja de verse afectada por los datos cercanos y se va suavizando gradualmente hasta quedarse en el promedio general (alrededor de 45), lo que evita que dé valores locos o exagerados en las esquinas. Por otro lado, la desviación estándar muestra esto mismo de forma muy clara: donde hay datos la duda es casi cero, pero en cuanto nos alejamos hacia la zona vacía, el error de predicción sube parejo hacia todos lados hasta llegar a un tope máximo ($D.E. \approx 1.8$) cuando la distancia es demasiado grande para que los datos sigan influyendo. 
+
+
+### Media con tendencia: ¿qué pasa si usamos Kriging ordinario de todas formas?
+
+Ahora aplicamos Kriging Ordinario (z ~ 1, asumiendo media constante) a los datos que realmente tienen una tendencia cuadrática, usando el semivariograma ajustado sobre sus residuales (modelo_ncte_fit). Hacemos esto a propósito para forzar un error controlado: queremos demostrar exactamente qué tan grave es ignorar una curvatura o tendencia cuadrática durante la predicción.
+
+```{r}
+ko_ncte_mal <- krige(z ~ 1, sf_ncte, malla_sim_sf, model = modelo_ncte_fit)
+```
+
+```{r}
+malla_sim$ko_ncte_pred <- ko_ncte_mal$var1.pred
+malla_sim$verdad       <- 12 - 3*malla_sim$x + 7*malla_sim$y -
+  5*malla_sim$x*malla_sim$y - 2*malla_sim$x^2 +
+  malla_sim$y^2
+```
+
+
+```{r}
+rango_ko_verdad <- range(c(malla_sim$verdad, malla_sim$ko_ncte_pred))
+
+p3 <- ggplot(malla_sim, aes(x, y, fill = verdad)) + geom_raster() +
+  geom_point(data = grid, aes(x, y), inherit.aes = FALSE, size = 0.6) +
+  scale_fill_viridis_c(name = "z", limits = rango_ko_verdad) + coord_equal() +
+  theme_test(base_size = 13) +
+  labs(title = "Tendencia verdadera \n (12-3x+7y-5xy-2x^2+y^2)")
+p4 <- ggplot(malla_sim, aes(x, y, fill = ko_ncte_pred)) + geom_raster() +
+  geom_point(data = grid, aes(x, y), inherit.aes = FALSE, size = 0.6) +
+  scale_fill_viridis_c(name = "z", limits = rango_ko_verdad) + coord_equal() +
+  theme_test(base_size = 13) +
+  labs(title = "Kriging ordinario \n (ignora la tendencia)")
+
+p3+p4
+```
+
+```{r}
+cor_ko_extrap   <- cor(malla_sim$ko_ncte_pred[malla_sim$zona == "Extrapolación"],
+                        malla_sim$verdad[malla_sim$zona == "Extrapolación"])
+rango_ko_extrap <- range(malla_sim$ko_ncte_pred[malla_sim$zona == "Extrapolación"])
+```
+
+Dentro del área con datos ($[0,14]$), el Kriging Ordinario (KO) logra predecir razonablemente bien porque las observaciones cercanas sostienen la predicción local. El problema ocurre en la zona de extrapolación: mientras la tendencia verdadera cuadrática cae drásticamente hasta valores inferiores a $-2000$ (hacia las esquinas superior e inferior derechas) y sube sobre 1000 en la esquina superior izquierda, la predicción de KO se queda completamente plana, atrapada cerca de la media global (alrededor de 0). Al ignorar los términos cuadráticos e interacciones ($x^2$, $y^2$, $xy$), el KO es incapaz de proyectar la curvatura del terreno.   En conclusión, ignorar una tendencia cuadrática al predecir fuera de la muestra hace que el Kriging Ordinario pierda todo contacto con la realidad, ya que su propia estructura solo le permite suavizar hacia el promedio local sin continuar los patrones de curvatura.  
+
+
+### Media con tendencia: Kriging universal
+
+Cuando la media no es constante y sigue un patrón (como una curva o una pendiente), usamos **Kriging Universal (KU)**. A diferencia del Kriging Ordinario, este método sí toma en cuenta la tendencia de los datos y ajusta el variograma sobre lo que queda limpio de esa tendencia (los residuales), lo que le permite seguir la curvatura del terreno tanto dentro como fuera de la zona con datos.
+
+```{r}
+malla_sim_sf$x <- malla_sim$x
+malla_sim_sf$y <- malla_sim$y
+ku_ncte <- krige(z ~ x + y + x:y + x^2 + y^2, sf_ncte, malla_sim_sf, model = modelo_ncte_fit)
+```
+
+```{r}
+malla_sim$ku_ncte_pred <- ku_ncte$var1.pred
+```
+
+Al ejecutar krige(z ~ x + y + I(x*y) + I(x^2) + I(y^2), ...), gstat realiza Kriging Universal estimando los coeficientes de la superficie cuadrática mediante mínimos cuadrados generalizados (GLS), usando el variograma ajustado sobre los residuales. La predicción final combina esa curvatura determinística estimada con la corrección espacial de los residuales. Para comprobar qué tan bien capturó el modelo la tendencia real, podemos pedirle a gstat la superficie ajustada (BLUE = TRUE) y comparar sus coeficientes estimados con los valores verdaderos utilizados en la simulación.
+
+```{r}
+g_fit_ncte <- gstat(formula = z ~ x + y + x:y + x^2 + y^2, data = sf::as_Spatial(sf_ncte), model = modelo_ncte_fit)
+pts_coef <- sf::as_Spatial(
+  sf::st_as_sf(
+    data.frame(
+      x = c(0, 1, 0, 1, 2, 0),
+      y = c(0, 0, 1, 1, 0, 2)
+    ),
+    coords = c("x", "y"), 
+    remove = FALSE
+  )
+)
+coef_blue <- as.data.frame(predict(g_fit_ncte, newdata = pts_coef, BLUE = TRUE))
+```
+
+
+```{r}
+p <- coef_blue$var1.pred
+
+b0 <- p[1]                          # Intercepto: f(0,0)
+bx <- -1.5*p[1] + 2*p[2] - 0.5*p[5] # Lineal x
+by <- -1.5*p[1] + 2*p[3] - 0.5*p[6] # Lineal y
+bxy <- p[1] - p[2] - p[3] + p[4]    # Interacción xy: f(1,1) - f(1,0) - f(0,1) + f(0,0)
+cx <- 0.5*p[1] - p[2] + 0.5*p[5]    # Cuadrático x
+cy <- 0.5*p[1] - p[3] + 0.5*p[6]    # Cuadrático y
+
+
+tabla_coef <- tibble::tibble(
+  parametro = c(
+    "Intercepto", 
+    "Pendiente en x", 
+    "Pendiente en y", 
+    "Interacción x e y", 
+    "Término Cuadrático en x", 
+    "Término Cuadrático en y"
+  ),
+  estimado  = c(b0, bx, by, bxy, cx, cy),
+  verdadero = c(12, -3, 7, -5, -2, 1)
+)
+
+tabla_coef
+```
+
+Al comparar los coeficientes estimados por el modelo frente a los valores verdaderos, se hace evidente que el modelo ajustado omitió los términos cuadráticos ($x^2$ e $y^2$), arrojando una estimación de $0.000000$ para ambos. Esta omisión provocó que el modelo absorbiera toda la curvatura restante ajustando el intercepto en $17.25$ (en lugar de $12.00$). Aunque logró aproximar bien los componentes lineales y la interacción de primer orden (pendiente en $x \approx -2.72$ vs $-3$, pendiente en $y \approx 7.35$ vs $7$, e interacción $x \cdot y \approx -5.04$ vs $-5$), la falta de los términos al cuadrado le impide capturar la forma cuadrática real del terreno, lo que generará distorsiones importantes en zonas lejanas o de extrapolación. 
+
+```{r}
+rango_comun <- range(c(malla_sim$ko_ncte_pred, malla_sim$ku_ncte_pred, malla_sim$verdad))
+
+p5 <- ggplot(malla_sim, aes(x, y, fill = verdad)) + geom_raster() +
+  scale_fill_viridis_c(name = "z", limits = rango_comun) + coord_equal() + 
+  theme_test(base_size = 8) +
+  labs(title = "Tendencia verdadera \n (12-3x+7y-5xy-2x^2+y^2)")
+p6 <- ggplot(malla_sim, aes(x, y, fill = ko_ncte_pred)) + geom_raster() +
+  scale_fill_viridis_c(name = "z", limits = rango_comun) + coord_equal() + 
+  theme_test(base_size = 8) +
+  labs(title = "Kriging ordinario \n (ignora la tendencia)")
+p7 <- ggplot(malla_sim, aes(x, y, fill = ku_ncte_pred)) + geom_raster() +
+  scale_fill_viridis_c(name = "z", limits = rango_comun) + coord_equal() + 
+  theme_test(base_size = 8) +
+  labs(title = "Kriging universal")
+
+(p5 + p6) / (plot_spacer() + p7 + plot_spacer() + plot_layout(widths = c(0.5, 1, 0.5))) +
+  plot_layout(guides = "collect", heights = c(1, 1)) &
+  theme(
+    legend.position = "right",
+    plot.margin = margin(5, 5, 5, 5)
+  )
+```
+
+Al comparar las tres superficies, el Kriging Ordinario fracasa rotundamente al extrapolar fuera de la zona muestreada, aplanando las predicciones hacia la media global (alrededor de 0) e ignorando la pronunciada curvatura que cae por debajo de $-2000$ hacia las esquinas superiores e inferiores derechas; en contraste, el Kriging Universal logra replicar de forma prácticamente idéntica la superficie verdadera, demostrando que al incorporar explícitamente los términos determinísticos ($x^2, y^2, xy$) se logra proyectar el gradiente y la estructura espacial de la variable con total precisión tanto dentro como fuera de la nube de datos.   
+
+
+## Comparación cuantitativa en la zona de extrapolación
+
+Para evaluar numéricamente el desempeño de los modelos fuera del área con datos, calculamos la correlación de Pearson frente a la superficie verdadera y el rango de valores predichos exclusivamente en la zona de extrapolación. Esta comparación permite cuantificar directamente cómo la inclusión de la tendencia cuadrática en el Kriging Universal evita el aplanamiento de las predicciones observado en el Kriging Ordinario.
+
+```{r}
+extrap <- malla_sim$zona == "Extrapolación"
+tabla_extrap <- tibble(
+  metodo = c("Kriging ordinario", "Kriging universal"),
+  correlacion_con_verdad = c(cor(malla_sim$ko_ncte_pred[extrap], malla_sim$verdad[extrap]),
+                              cor(malla_sim$ku_ncte_pred[extrap], malla_sim$verdad[extrap])),
+  rango_predicho = c(paste(round(range(malla_sim$ko_ncte_pred[extrap]), 1), collapse = " a "),
+                      paste(round(range(malla_sim$ku_ncte_pred[extrap]), 1), collapse = " a "))
+)
+
+tabla_extrap
+```
+
+
+Los resultados confirman cuantitativamente la superioridad del Kriging Universal en la zona de extrapolación, alcanzando una correlación de 0.91 frente a solo 0.44 del Kriging Ordinario. Además, el Kriging Universal logra replicar la magnitud real de la tendencia cuadrática con un rango predicho amplio (de $-2320.3$ a $974.1$). En cambio, el Kriging Ordinario subestima drásticamente la variabilidad espacial recortando las predicciones a un rango comprimido (de $-723.6$ a $64.8$). 
+
+
+
+
+
+
+
+
+
+
+
+

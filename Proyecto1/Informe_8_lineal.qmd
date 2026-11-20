@@ -1,0 +1,1226 @@
+---
+lang: es
+toc: true
+number-sections: true
+toc-title: "Índice General"
+crossref:
+  lof-title: "Índice de Figuras"
+  lot-title: "Índice de Tablas"
+bibliography: bib/referencias.bib
+bibliographystyle: apa                  # Utiliza estilo de citacion APA
+nocite: '@*'                            # Agrega la bibliografia no citada
+format: 
+  pdf: 
+    pdf-engine: pdflatex
+    documentclass: article
+    include-before-body: latex_paginatitulo_plantilla_iam.tex
+    lof: true
+    lot: true
+    include-in-header:
+      text: |
+        \usepackage{etoolbox}
+        \apptocmd{\tableofcontents}{\clearpage}{}{}
+        \pretocmd{\listoftables}{\clearpage}{}{}
+        \apptocmd{\listoftables}{\newpage}{}{}
+    geometry:
+      - top=30mm
+      - left=15mm
+      - bottom=30mm
+      - right=15mm
+      - heightrounded
+    mainfont: "Times New Roman"
+    fontsize: 10pt
+    colorlinks: true                     
+    fig-pos: "H"
+editor: source
+---
+
+
+```{r setup, include = F}
+knitr::opts_chunk$set(fig.path = 'figurasR/',
+                      echo = FALSE, warning = FALSE, message = FALSE,
+                      fig.align = "center", out.width = "70%",
+                      cache = FALSE, comment = NA)
+```
+
+```{r}
+# Limpieza del ambiente
+
+rm(list = ls() )
+
+####################################
+# Librerias Y Datos
+###################################
+
+library(knitr)
+library(kableExtra)
+library(sf)
+library(gstat)
+library(ade4)
+library(geodata)
+library(gt)
+library(nortest)
+library(tidyverse)   # se carga al final para que dplyr::select/filter no queden enmascarados por terra
+library(patchwork)
+
+
+data <- read.csv("https://raw.githubusercontent.com/LuisOsorno-Stats/Estad-stica_Espacial_2026-2/main/Proyecto1/Data/Temperatura_Ambiente_del_Aire_13_07_2026.csv")
+
+# Selección de los departamentos de las regiones Caribe y Pacífica
+
+RegionSelec <- c("ATLANTICO", "BOLIVAR", "CESAR", "CORDOBA",
+                 "LA GUAJIRA", "MAGDALENA", "SUCRE", "CAUCA", "CHOCO", "NARIÑO", "VALLE DEL CAUCA") 
+
+# Se incluye un municipio de Antioquia para la reproducción del continuo en el Urabá
+
+data <- data |> filter(Departamento %in% RegionSelec | Municipio == 'CAREPA')
+
+# Nota: el archivo corresponde al 13 de julio de 2026. Si no viniera ya filtrado
+# por hora, aquí hay que quedarse con la ventana de 11:00 a 14:00 antes de resumir.
+```
+
+```{r}
+set.seed(1234)
+```
+
+# Abstract
+
+El monitoreo continuo de extremos térmicos en las zonas costeras de Colombia se ve limitado por la baja densidad espacial de las estaciones meteorológicas. El objetivo de este estudio fue analizar la distribución espacial de la temperatura del aire a 2 m de la superficie en las regiones Caribe y Pacífica el 13 de julio de 2026 (11:00–14:00 horas), identificando áreas no monitoreadas con probabilidad de superar el umbral crítico de 31 $^\circ\text{C}$. Para mitigar sesgos asociados al ciclo diurno, se filtraron exclusivamente los registros del mediodía. Posteriormente, se realizó un análisis exploratorio, se modeló la dependencia espacial mediante variogramas ajustados por mínimos cuadrados ponderados y se ejecutó una interpolación por Kriging Universal. Los resultados indican que la costa Pacífica permaneció bajo el umbral crítico, mientras que las excedencias (> 31 $^\circ\text{C}$) se concentraron exclusivamente en el Caribe, destacando tres focos: norte de Sucre ($\sim 33\ ^\circ\text{C}$), sur de La Guajira ($\sim 32\ ^\circ\text{C}$) y centro-occidente de Magdalena (31,0–32,0 $^\circ\text{C}$). Estos hallazgos demuestran la eficacia de la geoestadística para delimitar zonas vulnerables al calor extremo donde no existe cobertura instrumental.
+
+Palabras clave: Geoestadística, Kriging Universal, temperatura superficial, anomalías térmicas, Caribe colombiano.
+
+# Introducción
+
+La estadística espacial es una herramienta fundamental para comprender fenómenos naturales. En este trabajo se empleará la geoestadística para analizar la temperatura en las regiones Caribe y Pacífica de Colombia el 13 de julio de 2026, un día en el que varios medios reportaron temperaturas especialmente altas. 
+
+Para evitar distorsionar los datos mezclando las temperaturas de la madrugada o la noche con el calor del mediodía, el estudio se enfoca únicamente en las mediciones tomadas entre las 11:00 y las 14:00 horas, asegurando así un análisis uniforme. La atención se centra en los departamentos de las regiones Caribe y Pacífica, donde se esperan las temperaturas más elevadas y la influencia del océano sobre las olas de calor, aunque algunos de ellos (como Cauca y Nariño) incluyen zonas de cordillera con temperaturas bajas. El trabajo se desarrolla en etapas claras: inicia con un análisis descriptivo de los datos y sigue con un análisis estructural para verificar la dependencia espacial, definir la estructura, ajustar el modelo y, finalmente, realizar predicciones en lugares no observados mediante kriging.
+
+# Pregunta de investigación
+
+Considerando las barreras y diferencias geográficos de ambas regiones y la imposibilidad de contar con sensores en cada punto del territorio durante las horas de máximo calor, se plantea la siguiente pregunta de investigación: ¿Cómo se distribuyen espacialmente las anomalías térmicas a $2\space m$ de la superficie el 13/07/2026 durante las 11:00 a.m. y 14:00 p.m., y cuáles son las zonas no monitoreadas con mayor probabilidad espacial de superar el umbral crítico de 31°C?
+
+# Metodología
+
+La metodología de este trabajo se divide en una secuencia lógica que permite pasar de datos puntuales a un mapa continuo de temperaturas. Para ello, se parte de la depuración y exploración básica de las mediciones del mediodía, se evalúa la relación espacial entre los puntos observados y se ajusta un modelo teórico de variograma. Con esta base, se realizan las estimaciones en las zonas no monitoreadas mediante kriging, lo que permite ubicar con precisión los focos de calor extremo.
+
+## Datos
+
+El conjunto de datos proviene de la página web de [Datos Abiertos Colombia](https://www.datos.gov.co/). La base de datos se encuentra almacenada allí y se llama [Temperatura Ambiente del Aire](https://www.datos.gov.co/Ambiente-y-Desarrollo-Sostenible/Temperatura-Ambiente-del-Aire/sbwg-7ju4/about_data). Allí se reúne registros diarios y detallados sobre la temperatura del aire en diversas estaciones meteorológicas a lo largo del país, los datos reciben un control básico de calidad, según las recomendaciones de la Organización Meteorológica Mundial (OMM). Siendo posible observar el comportamiento en ciertas frecuencias horarias, diarias, semana, mensual y anual. 
+
+Claramente, el aspecto temporal de los datos representa un gran reto para analizar, es por ello que se tomó una ventana de observación muy específica, descrita anteriormente para el 13 de julio de 2026. La elección de la ventana de observación o mejor dicho, la ventana de horas analizada no fue arbitraria, se contempló el horario desde las 11:00 a las 14:00 horas con el objetivo de lograr uniformidad de las lecturas de temperaturas del aire; evitando sesgo en la toma valores muy extremos que son propios de jornadas diferentes en el día, por ejemplo temperatura en la madrugada y al medio día. 
+
+```{r}
+# Se crea una llave para agrupar por ubicación
+
+data$Ubicacion <- paste(data$Latitud, "_", data$Longitud)
+
+# Se calculan medidas de tendencia central para cada medidor
+
+data_summary <- data |>
+  group_by(Ubicacion) |> 
+  mutate(TemperaturaMedia = mean(ValorObservado),
+         TemperaturaQ1 = quantile(ValorObservado, 0.25),
+         TemperaturaMediana = median(ValorObservado),
+         TemperaturaQ3 = quantile(ValorObservado, 0.75),
+         TemperaturaMaxima = max(ValorObservado),
+         Registros = n(),
+         Sd = sd(ValorObservado),
+         Diff_Median_Mean = TemperaturaMedia - TemperaturaMediana) |> 
+  distinct(Ubicacion, .keep_all = TRUE) |> 
+  ungroup()
+
+Tabla1 <- data_summary[, c("Departamento", "Municipio",
+                           "TemperaturaMedia", "TemperaturaMediana",
+                           "TemperaturaMaxima", "Registros", "Sd")] |>
+  arrange(desc(Sd))
+```
+
+```{r}
+#| label: tbl-resumen-temp
+#| tbl-cap: "Resumen estadístico de la temperatura del aire (10 medidores con mayor desviación estándar)"
+
+kable(head(Tabla1, 10), 
+      booktabs = TRUE,
+      digits = 2,
+      align = "c",
+      longtable = FALSE,
+      col.names = c("Departamento", "Municipio", "Temperatura Media",
+                    "Temperatura Mediana", "Temperatura Máxima",
+                    "Registros", "Sd")) %>%
+  kable_styling(latex_options = c("hold_position"),
+                position = "center",
+                full_width = TRUE,
+                font_size = 9) %>%
+  column_spec(1, width = "3cm") %>%
+  column_spec(2:ncol(Tabla1), width = "1.5cm")
+```
+
+Al analizar la @tbl-resumen-temp se muestran los 10 medidores con mayor desviación estándar, es decir, aquellos donde más varía la temperatura dentro de la ventana de 11:00 a 14:00. El caso más llamativo es el municipio de Nóvita (Chocó), con una desviación de $7,26\text{ }^\circ\text{C}$ entre lecturas, un valor muy alto para solo tres horas y que conviene revisar (posible error de medición o un cambio brusco de condiciones). Las demás estaciones de la tabla, como las ubicadas en Riohacha, Barbacoas y Zona Bananera, tienen desviaciones cercanas a $2,5\text{ }^\circ\text{C}$, que son de las más altas de la base; las estaciones que no aparecen en la tabla varían todavía menos. Además, en varias de estas localidades el promedio y la mediana casi coinciden, lo que indica que no hay valores atípicos que distorsionen el resumen. En consecuencia, restringir el análisis a las horas centrales del día ayuda a controlar los saltos bruscos de temperatura y da un conjunto de datos razonablemente uniforme, con Nóvita como la excepción a vigilar.
+
+
+## Análisis descriptivo 
+
+El análisis descriptivo permite explorar la calidad y distribución inicial de los registros de temperatura tomados durante el pico de radiación del mediodía. A continuación, se resumen las principales medidas estadísticas de los medidores en estudio para identificar su rango de variación, detectar posibles anomalías térmicas y comparar el comportamiento general entre ambas regiones costeras.
+
+```{r}
+# Se calculan medidas de tendencia central para cada departamento
+
+resumen_depto <- data_summary |>
+  group_by(Departamento) |>
+  mutate(n_ubicaciones = n(),
+         Registros_total = sum(Registros),
+         Minimo   = min(TemperaturaMaxima),
+         Q1       = quantile(TemperaturaMaxima, 0.25),
+         Mediana  = median(TemperaturaMaxima),
+         Promedio = mean(TemperaturaMaxima),
+         Q3       = quantile(TemperaturaMaxima, 0.75),
+         Maximo   = max(TemperaturaMaxima),
+         Sd       = sd(TemperaturaMaxima),
+         Diff_Median_Mean = Promedio - Mediana) |>
+  distinct(Departamento, .keep_all = TRUE) |>
+  ungroup() |>
+  dplyr::select(Departamento, n_ubicaciones, Registros_total, Minimo, Q1, Mediana,
+                Promedio, Q3, Maximo, Sd) |>
+  arrange(desc(Promedio))
+```
+
+```{r}
+#| label: tbl-resumen-depto
+#| tbl-cap: "Resumen de la temperatura promedio por departamento"
+
+kable(resumen_depto,
+      booktabs = TRUE,
+      digits = 2,
+      align = "c",
+      longtable = FALSE,
+      col.names = c("Departamento", "N° ubicaciones", "Registros",
+                    "Mínimo", "Q1", "Mediana", "Promedio", "Q3", "Máximo",
+                    "Desv. est.")) %>%
+  kable_styling(latex_options = c("hold_position"),
+                position = "center",
+                full_width = TRUE,
+                font_size = 8) %>%
+  column_spec(1, width = "3cm") %>%
+  column_spec(2:ncol(Tabla1), width = "1.4cm")
+```
+
+Los departamentos del Caribe (La Guajira, Atlántico, Magdalena, Bolívar y Cesar) son los más cálidos, con medianas entre 27 y 29°C, mientras que los del Pacífico (Cauca, Valle del Cauca y Nariño) son bastante más fríos, con medianas entre 14 y 22°C. Esto tiene mucho sentido porque en el Caribe casi todo el territorio es costero, mientras que el pacífico incluye zonas de cordillera donde la altura baja la temperatura.
+
+La desviación estándar confirma esa lectura. Atlántico (0.68), Córdoba (1.42) y Sucre (0.47) tienen temperaturas parecidas entre sus estaciones. En cambio Nariño (5.89) y Cauca (4.03) son las más variables, y se ve en sus rangos: Nariño va de 10.8 a 29.4°C y Cauca de 16 a 27.5°C, porque combinan estaciones de montaña con otras de costa.
+
+Antioquia aparece con una sola ubicación porque en el estudio solo se consideró un municipio de ese departamento, por eso su mínimo, mediana y máximo son el mismo valor y la desviación estándar no se puede calcular. 
+
+```{r}
+#| label: fig-temperatura_maxima
+#| fig-cap: "Temperatura máxima por departamento"
+
+ggplot(resumen_depto, aes(x = reorder(Departamento, Maximo), y = Maximo)) +
+  geom_col(fill = "#d9534f") +
+  geom_text(aes(label = round(Maximo, 1)), hjust = -0.2, size = 4) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.12))) +
+  coord_flip() +
+  theme_test(base_size = 13) +
+  labs(x = NULL, y = "Temperatura (°C)",
+       title = "Temperatura máxima por departamento") +
+  theme(axis.title = element_text(face = "bold"))
+```
+
+En la @fig-temperatura_maxima se ve que Bolívar tiene la temperatura máxima más alta, seguido de cerca por Magdalena y La Guajira, luego Atlántico y Cesar. Es decir, los cinco departamentos con los valores más altos son los del Caribe. Más abajo aparecen Chocó, Cauca, Antioquia, Sucre, Nariño, Córdoba y Valle del Cauca (Sucre y Córdoba también son caribeños, pero con máximos menores). Esta gráfica solo muestra el valor más extremo de cada departamento.
+
+En la @fig-numero_ubicaciones se nota que la cantidad de observaciones es bastante desigual entre departamentos. Nariño, Chocó y La Guajira son los que más estaciones tienen, mientras que Atlántico y Sucre son los que menos tienen (Como en Antioquia solo se considera un municipio aparece con una observación). Esto significa que los resultados de Nariño, Chocó y La Guajira son más confiables porque se apoyan en más datos.
+
+```{r}
+#| fig-cap: "Número de ubicaciones por departamento"
+#| label: fig-numero_ubicaciones
+#| out-width: "65%"
+#| fig-height: 3
+
+ggplot(resumen_depto, aes(x = reorder(Departamento, n_ubicaciones), y = n_ubicaciones)) +
+  geom_col(fill = "#3a7ca5") +
+  geom_text(aes(label = n_ubicaciones), hjust = -0.3, size = 4) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.12))) +
+  coord_flip() +
+  theme_test(base_size = 13) +
+  labs(x = NULL, y = "N° de ubicaciones",
+       title = "Ubicaciones por departamento") +
+  theme(axis.title = element_text(face = "bold"))
+```
+
+
+## Análisis estructural
+
+Con el fin de comprobar si la distribución de la temperatura responde a un patrón espacial organizado y no a un comportamiento puramente aleatorio, se lleva a cabo el análisis estructural. En esta fase se construye el variograma experimental para medir la similitud térmica en función de la distancia geográfica y se ajusta el modelo teórico que mejor representa dicha continuidad, preparando los parámetros necesarios para la etapa de predicción espacial.
+
+```{r}
+# Filtrado de columnas de interés para la base de datos a trabajar
+
+names_columnas = c("CodigoEstacion", "NombreEstacion", "Departamento", "Municipio",
+                   "ZonaHidrografica", "Longitud", "Latitud", "TemperaturaMaxima", "Registros")
+
+data_geo_tem = data_summary %>% dplyr::select(all_of(names_columnas))
+```
+
+```{r}
+# Pasar longitud y latitud a metros
+
+datos_sf <- st_as_sf(data_geo_tem, coords = c("Longitud", "Latitud"), crs = 4326, remove = FALSE) |>
+  st_transform(3116)
+```
+
+### Distribución espacial
+
+Con el fin de identificar patrones espaciales a gran escala o posibles tendencias geográficas en los datos, se graficó la ubicación de las estaciones junto con la temperatura máxima registrada en cada punto. El dominio de estudio abarca los departamentos de las costas Caribe y Pacífica, incorporando específicamente los municipios del Urabá antioqueño para mantener la continuidad costera. Esta representación permite evidenciar tanto la densidad desigual de la red de monitoreo como el marcado contraste térmico entre el norte cálido y los sectores montañosos del sur.
+
+```{r}
+#| fig-cap: "Ubicación de las estaciones y temperatura maxima por departamento"
+#| label: fig-distribucion_espacial
+#| out-width: "65%"
+#| fig-height: 3
+
+# Mapa por departamento
+
+# Descargar departamentos y municipios de Colombia
+depto_colombia <- gadm(country = "COL", level = 1, path = "Data") %>%
+  st_as_sf() %>%
+  st_transform(crs = 4326)
+
+mun_colombia <- gadm(country = "COL", level = 2, path = "Data") %>%
+  st_as_sf() %>%
+  st_transform(crs = 4326)
+
+# Función para dejar los nombres en mayúscula y sin tildes
+normalizar <- function(x) toupper(stringi::stri_trans_general(x, "Latin-ASCII"))
+
+# Departamentos del estudio, sin Antioquia (de Antioquia solo se incluye Urabá)
+deptos_estudio <- datos_sf %>%
+  st_drop_geometry() %>%
+  filter(Departamento != "ANTIOQUIA") %>%
+  distinct(Departamento) %>%
+  pull(Departamento)
+
+depto_estudio <- depto_colombia %>%
+  filter(normalizar(NAME_1) %in% normalizar(deptos_estudio))
+
+# Municipios de Urabá (parte norte de Antioquia)
+municipios_uraba <- c("APARTADO", "ARBOLETES", "CAREPA", "CHIGORODO", "MURINDO",
+                      "MUTATA", "NECOCLI", "SAN JUAN DE URABA",
+                      "SAN PEDRO DE URABA", "TURBO", "VIGIA DEL FUERTE")
+
+mun_uraba <- mun_colombia %>%
+  filter(normalizar(NAME_1) == "ANTIOQUIA",
+         normalizar(NAME_2) %in% municipios_uraba)
+
+# Contorno del área de estudio (departamentos + Urabá) en una sola geometría.
+# Se une en metros (3116), que es el sistema que se usará para la malla del kriging.
+poligono <- c(st_geometry(depto_estudio), st_geometry(mun_uraba)) %>%
+  st_transform(3116) %>%
+  st_union() %>%
+  st_make_valid() %>%
+  st_sf(geometry = .)
+
+# Misma geometría en grados, para dibujar sobre el mapa
+contorno_4326 <- st_transform(poligono, 4326)
+
+# Graficar
+ggplot() +
+  geom_sf(data = depto_estudio, fill = "white", color = "black") +
+  geom_sf(data = mun_uraba, fill = "white", color = "black") +
+  geom_sf(data = contorno_4326, fill = NA, color = "black", linewidth = 0.9) +
+  geom_sf(data = datos_sf, aes(color = TemperaturaMaxima), size = 2, alpha = 0.8) +
+  scale_color_viridis_c(option = "turbo", name = "Temp. (°C)") +
+  coord_sf(crs = 4326) +
+  theme_bw() +
+  labs(
+    title = "Ubicación de Estaciones por Departamento",
+    x = "Longitud",
+    y = "Latitud"
+  )
+```
+
+Uno de los primeros elementos claves a resaltar en la @fig-distribucion_espacial, es que se nota una estructura de bloques en el mapa costero. En el norte del país, en el departamento de la Guajira es evidente y esperado que las temperaturas sean altas, siendo superiores a $30^\circ C$, de hecho son de las más altas; esto seguido por el Magdalena y Atlántico. En contraste con departamentos de la costa Pacífica que sus temperaturas son más bajas, por ejemplo en Nariño y el Cauca, llegando a ser entre $10^\circ C$ y $15^\circ C$. A grandes rasgos, existe estructura de bloques en los datos espaciales y hay una transición suave en el mapa, no hay un cambio brusco de los colores. Descriptivamente, se evidencia que hay cierto tipo de tendencia en el mapa, es decir un gradiente, el cual va creciendo de Sur a Norte y también aumenta de Oeste a Este. Gráficamente, se puede verificar el supuesto de dependencia espacial, la cual posteriormente será ratificada mediante test estadísticos correspondientes.
+
+### Semivariograma Cloud
+
+Antes de promediar la dependencia espacial por intervalos de distancia, (para construir el semivariograma bins), se inspecciona la nube de semivariograma (variogram cloud), donde cada punto representa la semivarianza entre un par específico de estaciones frente a su distancia geográfica. Esta herramienta exploratoria permite evaluar la dispersión real de los datos en el espacio e identificar la presencia de pares atípicos (outliers espaciales) que justifiquen el uso de estimadores robustos.
+
+```{r}
+#| fig-cap: "Semivariograma cloud de la temperatura máxima"
+#| label: fig-semivariograma_cloud
+# Semivariograma cloud
+
+vc_temp <- variogram(TemperaturaMaxima ~ 1, datos_sf, cloud = TRUE)
+
+ggplot(as.data.frame(vc_temp), aes(x = dist, y = gamma)) +
+  geom_point(alpha = 0.25, size = 1) +
+  geom_smooth(method = "loess", se = FALSE, color = "darkred") +
+  theme_test(base_size = 13) +
+  labs(x = "Distancia geográfica (m)", y = expression(frac(1, 2) * (Z(s[i]) - Z(s[j]))^2),
+       title = "Semivariograma cloud — temperatura máxima") +
+  theme(axis.title = element_text(face = "bold"))
+```
+
+Este gráfico de la @fig-semivariograma_cloud muestra, para cada par de estaciones, qué tan distinta es su temperatura frente a que tan lejos están una de otra. Lo más importante es que la línea roja sube con la distancia, por tanto se sospecha una dependencia espacial: estaciones cercanas tienen temperaturas parecidas y, a medida que se alejan, las diferencias crecen. 
+
+También se ve que la nube de puntos es muy dispersa. Hay una gran concentración de puntos cercanos a cero en todas las distancias, pero también muchos puntos altos. Esto ocurre porque el gráfico es muy ruidoso por naturaleza. Por eso la línea roja es más útil que los puntos para leer el patrón. 
+
+### Semivariograma bins
+
+```{r}
+# Distancia máxima: la mitad de la distancia entre las dos estaciones más lejanas
+dist_max_total   <- max(dist(st_coordinates(datos_sf)))
+distancia_maxima <- dist_max_total / 2
+ancho_intervalo  <- distancia_maxima / 12
+```
+
+Para definir los parámetros espaciales del variograma experimental, se calculó en primer lugar la separación máxima entre las estaciones meteorológicas más distantes del área de estudio, obteniendo un recorrido total de `r round(dist_max_total / 1000, 1)` km. Siguiendo el criterio estándar en geoestadística para evitar el sesgo por bajo número de pares en distancias extremas, se fijó una distancia máxima de análisis (*cutoff*) equivalente a la mitad de dicho recorrido, es decir, `r round(distancia_maxima / 1000, 1)` km (`r format(round(distancia_maxima, 0), big.mark = ",")` m). Finalmente, este rango se dividió en 12 intervalos regulares con un ancho de paso (*lag*) de `r round(ancho_intervalo / 1000, 1)` km (`r format(round(ancho_intervalo, 0), big.mark = ",")` m) cada uno.
+
+```{r}
+#| fig-cap: "Semivariograma bins de la temperatura, sin remover la tendencia"
+#| label: fig-semivariograma_empirico
+
+# Semivariograma empírico
+
+v_temp <- variogram(TemperaturaMaxima ~ 1, datos_sf,
+                    cutoff = distancia_maxima, width = ancho_intervalo)
+
+ggplot(v_temp, aes(x = dist, y = gamma)) +
+  geom_point(aes(size = np), color = "#3a7ca5") +
+  geom_line(color = "#3a7ca5", linetype = "dashed") +
+  scale_size_continuous(name = "N° pares", range = c(1.5, 5)) +
+  theme_test(base_size = 13) +
+  labs(x = "Distancia (m)", y = expression(hat(gamma)(h)),
+       title = "Semivariograma bins — temperatura máxima") +
+  theme(axis.title = element_text(face = "bold"))
+```
+
+El semivariograma cloud es demasiado ruidoso para estimar parámetros, así que en la práctica se agrupan los pares de puntos en intervalos (bins) de distancia y se promedia la disimilitud dentro de cada intervalo
+
+El elemento principal en la @fig-semivariograma_empirico es que la semivarianza crece de forma continua con la distancia. En este caso no se aprecia una meseta, lo que podría indicar que existe una tendencia, a medida que comparamos estaciones lejanas, las diferencias de temperatura siguen aumentando
+
+Se usa como distancia máxima la mitad de la distancia entre las dos estaciones más lejanas, porque a distancias mayores quedan pocos pares por intervalo y las estimaciones dejan de ser confiables.
+
+### Test de Mantel
+
+Para evaluar el supuesto de dependencia espacial identificado en la gráfica de la temperatura ambiente del aire, se implementa el Test de Mantel. Esta prueba no paramétrica es fundamental para determinar si la variación de las temperaturas entre estaciones meteorológicas es producto de la cercanía geográfica entre ellas, evalúando de forma directa la distancia euclidiana versus la disimilitud térmica observada. Las hipótesis que se evalúan son:
+
+\begin{align*}
+H_0 &: \text{No existe dependencia espacial, es decir, aleatoriedad espacial}\\
+H_1 &: \text{Existe dependencia espacial, es decir, correlación espacial}
+\end{align*}
+
+El estadístico que se empleará para probar la hipótesis es:
+
+$$
+M = \sum_{i=1}^{n} \sum_{j=1}^{n} W_{ij} U_{ij}, \quad W_{ij} = \| s_i - s_j \|, \quad U_{ij} = (Z(s_i) - Z(s_j))^2
+$$
+
+Su significancia se evalúa vía simulación Monte Carlo: se permutan las temperaturas entre las estaciones 999 veces y se compara el valor observado con la distribución de $M$ bajo aleatoriedad.
+
+
+```{r}
+# Test de mantel
+
+geodist   <- dist(st_coordinates(datos_sf))
+dist_temp <- dist(datos_sf$TemperaturaMaxima)
+
+set.seed(12345)
+mantel_temp <- ade4::mantel.rtest(geodist, dist_temp, nrepet = 999)
+
+# Extraer resultados a un data frame limpio
+tabla_mantel <- data.frame(
+  Estadistico_r = round(mantel_temp$obs, 4),
+  Valor_p       = ifelse(mantel_temp$pvalue < 0.001, "< 0.001",
+                         round(mantel_temp$pvalue, 4)),
+  Permutaciones = mantel_temp$rep,
+  Conclusion    = ifelse(mantel_temp$pvalue < 0.05, 
+                         "Existe autocorrelación espacial significativa", 
+                         "No hay evidencia de autocorrelación espacial")
+  )
+```
+
+
+```{r}
+#| label: tbl-test_de_mantel
+#| tbl-cap: "Test de Mantel para evaluar dependencia espacial"
+#| tbl-pos: "H"
+
+kable(tabla_mantel,
+      format = "latex",
+      booktabs = TRUE,
+      align = "c",
+      col.names = c("Estadístico r de Mantel", "Valor p", "Permutaciones",
+                    "Interpretación")) %>%
+  kable_styling(position = "center",
+                font_size = 9)
+```
+
+El test de Mantel, mostrado en la @tbl-test_de_mantel arroja un estadístico de `r round(mantel_temp$obs, 4)` con un valor p = `r mantel_temp$pvalue` (999 permutaciones; con ese número de permutaciones el menor valor p posible es 0,001), muy por debajo de 0,05. Rechazamos la hipótesis nula de aleatoriedad espacial: hay evidencia estadística sólida de que la temperatura está espacialmente autocorrelacionada en las regiones Caribe y Pacífica.
+
+### Diagnóstico de tendencia
+
+Antes de ajustar el modelo de variograma definitivo, es necesario verificar si la temperatura cumple con el supuesto de estacionariedad de la media o si presenta una tendencia espacial a gran escala. Dada la diferencia geográfica entre las llanuras cálidas del Caribe y las zonas montañosas del Pacífico, evaluar cómo varía la temperatura en función de las coordenadas geográficas (latitud y longitud) permite determinar si se requiere modelar dicha deriva mediante Kriging Universal en lugar de asumir una media constante.
+
+```{r}
+#| fig-cap: "Temperatura mediana contra longitud y latitud, con recta de regresión"
+#| label: fig-diagnostico_de_tendencia
+
+# Diagnóstico de tendencia
+
+data_summary %>%
+  pivot_longer(cols = c(Longitud, Latitud), names_to = "coordenada", values_to = "valor") %>%
+  ggplot(aes(x = valor, y = TemperaturaMaxima)) +
+  geom_point(alpha = 0.4) +
+  geom_smooth(method = "lm", color = "darkred") +
+  facet_wrap(~coordenada, scales = "free_x") +
+  theme_test(base_size = 13) +
+  labs(x = NULL, y = "Temperatura (°C)",
+       title = "Temperatura vs coordenadas") +
+  theme(axis.title = element_text(face = "bold"))
+```
+
+En la ilustración de la @fig-diagnostico_de_tendencia muestra la temperatura de cada estación contra su latitud (izquierda) y contra su longitud (derecha), con una recta de regresión en rojo y su banda de confianza en gris. Lo que se ve es que en ambos casos la temperatura sube a medida que aumentan las coordenadas, lo que confirma que hay una tendencia espacial clara en los datos.
+
+En la latitud, se observa que mientras más al norte está la estación, más caliente es. Esto tiene sentido con lo que vimos en el mapa: las estaciones del norte son las del Caribe, cálidas y de baja altura, y las del sur son las de Nariño y el suroccidente, mucho más frías. En la longitud pasa algo parecido, las estaciones más al oriente son las del Caribe (La Guajira, Cesar), y las más al occidente son las del Pacífico y la zona andina, que son más frías.
+
+Sin embargo, la relación no es perfectamente lineal. En la latitud se ve un grupo de puntos muy fríos, que quedan por debajo de la recta; son las estaciones de altura de Nariño. Ahí la línea sobreestima la temperatura. En conclusión, el gráfico justifica remover la tendencia con una regresión en longitud y latitud, porque ambas variables muestran una relación evidente con la temperatura.
+
+## Removoción de la Tendencia
+
+Dado que la temperatura aumenta de forma sistemática hacia el norte y el oriente del área de estudio, calcular el variograma directamente sobre los datos originales mezclaría la tendencia geográfica con la correlación local entre estaciones. Para aislar la estructura espacial pura, se ajusta una regresión lineal en función de las coordenadas y se repite el análisis estructural utilizando los residuales resultantes, garantizando así un modelado adecuado para la posterior interpolación mediante Kriging Universal
+
+```{r, results='hide'}
+# Usando regresión
+
+modelo_reg <- lm(TemperaturaMaxima ~ Longitud + Latitud, data = datos_sf)
+summary(modelo_reg)
+
+datos_sf$TemperaturaMaximaReg      <- residuals(modelo_reg)
+data_geo_tem$TemperaturaMaximaReg  <- residuals(modelo_reg)
+```
+
+### Distribución Espacial - Removiendo tendencia
+
+Con el fin de comprobar visualmente que la extracción de la tendencia lineal eliminó el gradiente térmico a gran escala, se presenta la distribución espacial de los residuales sobre el área de estudio. En este mapa se evalúa si los valores positivos y negativos se distribuyen de manera más homogénea a lo largo de ambas regiones costeras, confirmando que se ha removido la deriva sistemática y dejando en evidencia únicamente la variabilidad espacial de corta escala.
+
+```{r}
+#| fig-cap: "Residuos de la regresión por estación"
+# Mapa por departamento
+
+# Graficar
+ggplot() +
+  geom_sf(data = depto_estudio, fill = "white", color = "black") +
+  geom_sf(data = mun_uraba, fill = "white", color = "black") +
+  geom_sf(data = datos_sf, aes(color = TemperaturaMaximaReg), size = 2, alpha = 0.8) +
+  scale_color_viridis_c(option = "turbo", name = "Residuo (°C)") +
+  coord_sf(crs = 4326) +
+  theme_bw() +
+  labs(
+    title = "Residuos de la regresión por estación",
+    subtitle = "Temperatura (°C) sin la tendencia en Longitud y Latitud",
+    x = "Longitud",
+    y = "Latitud"
+  )
+```
+
+Al quitar la tendencia en longitud y latitud de manera lineal, en los residuos ya no se ve el gradiente norte-sur tan marcado del mapa original. Aun así queda estructura espacial tras remover la tendencia, en el Caribe predominan residuos verdes y azules, mientras que en el suroccidente, cerca de Nariño y la costa pacífica, aparecen puntos naranjas y rojos.
+
+En resumen, la tendencia de primer orden se removió en buena parte, pero los residuos conservan agrupamientos de signo parecido entre estaciones vecinas
+
+### Semivariogramas
+
+A partir de los residuales obtenidos tras eliminar la tendencia, se generan nuevamente los semivariogramas bajo dos enfoques: el semivariograma cloud, para explorar el comportamiento individual de todos los pares de estaciones y descartar pares extremos, y el semivariograma por bins, para sintetizar la semivarianza promedio por clases de distancia y definir la estructura espacial definitiva del estudio.
+
+```{r}
+#| fig-cap: "Semivariograma bins de los residuos (tendencia de 1er orden removida)"
+#| label: fig-semivariograma_bins_sin_tendencia
+#| fig-height: 2.8
+
+# Eliminar tendencia
+
+v_resid <- variogram(TemperaturaMaximaReg ~ 1, datos_sf, cutoff = distancia_maxima, width = ancho_intervalo)
+
+ggplot(v_resid, aes(x = dist, y = gamma)) +
+  geom_point(aes(size = np), color = "#3a7ca5") +
+  geom_line(color = "#3a7ca5", linetype = "dashed") +
+  scale_size_continuous(name = "N° pares", range = c(1.5, 5)) +
+  theme_test(base_size = 13) +
+  labs(x = "Distancia (m)", y = expression(hat(gamma)(h)),
+       title = "Semivariograma de los residuos \n (tendencia de 1er orden removida)") +
+  theme(axis.title = element_text(face = "bold"))
+
+```
+
+Al remover la tendencia, la variación bajó drásticamente (de 30 a 14). Sin embargo, aún queda una leve dependencia espacial. Ver @fig-semivariograma_bins_sin_tendencia. A distancias cortas (hasta 400 km), la semivarianza crece de 7 a 9, confirmando que las estaciones cercanas se parecen más entre sí. El valor inicial alto (3) revela un efecto pepita elevado, atribuible a diferencias locales como la altitud. Se eliminó la tendencia principal, pero persiste una estructura espacial a corta distancia. Por eso se trabaja con los residuos de la regresión de primer orden y con una distancia máxima limitada a la mitad de la distancia entre estaciones, de modo que los intervalos lejanos, con pocos pares, no distorsionen el modelo.
+
+```{r}
+#| fig-cap: "Semivariograma cloud de los residuos de la regresión"
+#| label: fig-semivariograma_cloud_sin_tendencia
+#| fig-height: 3
+
+# Semivariograma Cloud
+
+vc_temp_reg <- variogram(TemperaturaMaximaReg ~ 1, datos_sf, cloud = TRUE)
+
+ggplot(as.data.frame(vc_temp_reg), aes(x = dist, y = gamma)) +
+  geom_point(alpha = 0.25, size = 1) +
+  geom_smooth(method = "loess", se = FALSE, color = "darkred") +
+  theme_test(base_size = 13) +
+  labs(x = "Distancia geográfica (m)", y = expression(frac(1, 2) * (Z(s[i]) - Z(s[j]))^2),
+       title = "Semivariograma cloud — residuos de regresión") +
+  theme(axis.title = element_text(face = "bold"))
+```
+
+Al quitar la tendencia, veáse @fig-semivariograma_cloud_sin_tendencia, ahora la línea roja sube rápido en los primeros 100 km y luego se estabiliza, mostrando la dependencia espacial local que antes no se apreciaba.
+
+La dispersión de los puntos sigue siendo alta debido a diferencias locales (como las estaciones frías de Nariño).
+
+### Test de Mantel - Removiendo tendencia
+
+Una vez extraída la tendencia geográfica, se aplica nuevamente el Test de Mantel sobre los residuales obtenidos. Esto permite verificar estadísticamente si persiste una autocorrelación espacial local significativa entre estaciones cercanas que justifique el ajuste de un modelo de variograma, o si toda la estructura espacial original se debía únicamente al gradiente regional.
+
+```{r}
+# Test de Mantel
+
+geodist   <- dist(st_coordinates(datos_sf))
+dist_temp <- dist(datos_sf$TemperaturaMaximaReg)
+
+set.seed(12345)
+mantel_reg <- ade4::mantel.rtest(geodist, dist_temp, nrepet = 999)
+
+# Extraer resultados a un data frame limpio
+tabla_mantel_reg <- data.frame(
+  Estadistico_r = round(mantel_reg$obs, 4),
+  Valor_p       = ifelse(mantel_reg$pvalue < 0.001, "< 0.001",
+                         round(mantel_reg$pvalue, 4)),
+  Permutaciones = mantel_reg$rep,
+  Conclusion    = ifelse(mantel_reg$pvalue < 0.05, 
+                         "Existe autocorrelación espacial significativa", 
+                         "No hay evidencia de autocorrelación espacial")
+  )
+```
+
+```{r}
+#| label: tbl-test_de_mantel_sin_tendencia
+#| tbl-cap: "Test de Mantel para evaluar dependencia espacial sin tendencia"
+#| tbl-pos: "H"
+
+kable(tabla_mantel_reg,
+      format = "latex",
+      booktabs = TRUE,
+      align = "c",
+      col.names = c("Estadístico r de Mantel", "Valor p", "Permutaciones",
+                    "Interpretación")) %>%
+  kable_styling(position = "center",
+                font_size = 9)
+```
+
+El test de Mantel arroja un estadístico de `r round(mantel_reg$obs, 4)` con un valor p de `r mantel_reg$pvalue` (999 permutaciones), muy por debajo de 0,05. Rechazamos la hipótesis nula de aleatoriedad espacial: hay evidencia estadística de que los residuos de la temperatura siguen espacialmente autocorrelacionados una vez removida la tendencia. 
+
+### Normalidad
+
+Con el propósito de revisar la simetría de los datos y descartar la presencia de valores extremos que puedan afectar la estabilidad de la interpolación, se evalúa la normalidad de los residuales de temperatura. Verificar este comportamiento permite asegurar que la varianza de predicción estimada por el kriging sea confiable y representativa en toda el área de estudio.
+
+```{r}
+#| label: fig-normalidad
+#| fig-cap: "Diagnóstico de normalidad de los residuos de la regresión"
+#| fig-subcap:
+#|   - "Histograma"
+#|   - "Gráfico cuantil-cuantil (Q-Q)"
+#| layout-ncol: 2
+
+ggplot(data_geo_tem, aes(x = TemperaturaMaximaReg)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 12, fill = "#3a7ca5", color = "white") +
+  geom_density(color = "darkred", linewidth = 1) +
+  theme_test(base_size = 12) +
+  labs(x = "Residuo (°C)", y = "Densidad") +
+  theme(axis.title = element_text(face = "bold"))
+
+ggplot(data_geo_tem, aes(sample = TemperaturaMaximaReg)) +
+  stat_qq() +
+  stat_qq_line(color = "darkred") +
+  theme_test(base_size = 12) +
+  labs(x = "Cuantiles teóricos (Normal)", y = "Cuantiles muestrales") +
+  theme(axis.title = element_text(face = "bold"))
+```
+
+En el histograma de la @fig-normalidad-1 se observa que los residuos de la regresión se distribuyen de manera bastante simétrica alrededor de cero, abarcando un rango aproximado entre -8 °C y 9 °C. Aunque la curva de densidad muestra una ligera forma bimodal con dos picos cercanos a -1,5 °C y 2,5 °C —reflejo del contraste térmico entre las estaciones ubicadas en zonas de cordillera y las de llanura costera—, el grueso de los errores se concentra entre -4 °C y 4 °C sin sesgos extremos hacia alguna de las colas.   
+
+Por su parte, el gráfico cuantil-cuantil de la @fig-normalidad-2 confirma un ajuste razonable a la distribución normal, ya que la mayoría de los cuantiles muestrales se alinean estrechamente sobre la diagonal teórica roja en la zona central (entre los cuantiles -1,5 y 1). Si bien se aprecian ligeras desviaciones en la cola superior derecha (alrededor del cuantil teórico 1,5), estas no representan valores atípicos severos que comprometan la estabilidad del modelo, validando el uso de los residuos para la posterior estimación mediante Kriging Universal.
+
+```{r}
+# 1. Definir la variable (residuos de la regresión)
+x <- data_geo_tem$TemperaturaMaximaReg
+
+# 2. Ejecutar las pruebas de normalidad
+#    (no se usa Kolmogorov-Smirnov clásico porque la media y la desviación se estiman de los datos;
+#     para ese caso está Lilliefors)
+
+shapiro_res <- shapiro.test(x)
+lillie_res  <- lillie.test(x)
+cvm_res     <- cvm.test(x)
+ad_res      <- ad.test(x)
+
+# 3. Construir la tabla con los resultados extraídos
+tabla_normalidad <- tibble(
+  Prueba = c("Shapiro-Wilk", 
+             "Lilliefors (KS modificada)", 
+             "Cramér-von Mises",
+             "Anderson-Darling"),
+  `Estadístico` = c(unname(shapiro_res$statistic), 
+                    unname(lillie_res$statistic), 
+                    unname(cvm_res$statistic),
+                    unname(ad_res$statistic)),
+  `p-valor` = c(shapiro_res$p.value, 
+                lillie_res$p.value, 
+                cvm_res$p.value,
+                ad_res$p.value)
+) %>%
+  mutate(
+    `Decisión ($\\alpha$ = 0.05)` = if_else(`p-valor` > 0.05, 
+                                     "No rechaza H0 (Normal)", 
+                                     "Rechaza H0 (No normal)")
+  )
+
+n_rechazos <- sum(tabla_normalidad$`p-valor` <= 0.05)
+```
+
+```{r}
+#| label: tbl-test_de_normalidad
+#| tbl-cap: "Test de Normalidad al remover la tendencia"
+#| tbl-pos: "H"
+
+tabla_normalidad %>%
+  gt() %>%
+  fmt_number(
+    columns = `Estadístico`,
+    decimals = 4
+  ) %>%
+  fmt_scientific(
+    columns = `p-valor`,
+    rows = `p-valor` < 0.001,
+    decimals = 3
+  ) %>%
+  fmt_number(
+    columns = `p-valor`,
+    rows = `p-valor` >= 0.001,
+    decimals = 4
+  ) %>%
+  cols_label(
+    `Decisión ($\\alpha$ = 0.05)` = md("Decisión ($\\alpha = 0.05$)")
+  ) %>%
+  cols_align(
+    align = "center",
+    columns = c(`Estadístico`, `p-valor`, `Decisión ($\\alpha$ = 0.05)`)
+  )
+```
+
+De las cuatro pruebas, presentadas en la @tbl-test_de_normalidad, `r n_rechazos` rechazan la normalidad de los residuos al $5\%$. Como además las observaciones están correlacionadas espacialmente, los p-valores deben leerse como una guía y complementarse con el histograma y el gráfico Q-Q.
+
+### Semivariograma robusto
+
+Dado que en el análisis previo se observaron pares de estaciones cercanas con diferencias térmicas marcadas —producto del contraste topográfico entre las zonas costeras y los sectores de cordillera—, el estimador clásico del variograma puede verse sesgado al elevar al cuadrado dichas diferencias extremas. Para evitar que estos valores atípicos distorsionen la estructura espacial, se calcula el semivariograma robusto de Cressie y Hawkins. Este método reduce el peso de los pares extremos y permite capturar con mayor fidelidad la continuidad espacial real de los residuales de temperatura antes de ajustar el modelo teórico.
+
+```{r}
+#| fig-cap: "Semivariograma robusto (estimador de Cressie-Hawkins) de los residuos"
+#| fig-height: 3
+
+vc_temp_reg_robusto <- variogram(TemperaturaMaximaReg ~ 1, datos_sf,
+                                 cutoff = distancia_maxima, 
+                                 width = ancho_intervalo,
+                                 cressie = TRUE)
+
+ggplot(vc_temp_reg_robusto, aes(x = dist, y = gamma)) +
+  geom_point(aes(size = np), color = "#3a7ca5") +
+  geom_line(color = "#3a7ca5", linetype = "dashed") +
+  scale_size_continuous(name = "N° pares", range = c(1.5, 5)) +
+  theme_test(base_size = 13) +
+  labs(x = "Distancia (m)", y = expression(hat(gamma)(h)),
+       title = "Semivariograma robusto \n residuos de la regresión") +
+  theme(axis.title = element_text(face = "bold"))
+```
+
+El semivariograma robusto de los residuos muestra un efecto pepita inicial con una semivarianza cercana a 3.0, lo que indica variabilidad a microescala o error de medición en las distancias más cortas. Existe una dependencia espacial en el primer tramo donde la curva crece hasta los 100,000 metros, pero posteriormente exhibe leves oscilaciones, alcanzando un pico máximo de 17.5 cerca de los 450,000 metros. Este comportamiento sugiere que la meseta podría ubicarse a esa distancia máxima de 450,000 metros y que la señal posterior es ruido sin dependencia espacial; o alternativamente, que la meseta se alcanza antes de los 300,000 metros con valores cercanos a 10.0 y sufrió una interrupción que elevó los valores de la curva en los 450,000 metros.
+
+## Modelo de covarianza 
+
+A partir del comportamiento observado en el semivariograma robusto, se procede a seleccionar y ajustar el modelo teórico de covarianza espacial. Este paso permite resumir la dependencia espacial de la temperatura en una función matemática continua definida por su pepita, meseta y rango, proporcionando el insumo fundamental para calcular los pesos de interpolación en el Kriging Universal.
+
+```{r}
+# 1. Parámetros iniciales
+nugget_ini <- min(vc_temp_reg_robusto$gamma) * 0.5
+sill_ini   <- median(tail(vc_temp_reg_robusto$gamma, 5))
+psill_ini  <- max(sill_ini - nugget_ini, 0.01)
+rango_ini  <- max(vc_temp_reg_robusto$dist) / 2
+
+modelo_base <- function(m) {
+  kap <- if (m == "Mat") 1 else 0.5
+  vgm(psill = psill_ini, model = m, range = rango_ini, nugget = nugget_ini, kappa = kap)
+}
+
+# 2. Códigos de fit.method de gstat
+#    7 = WLS con pesos N/h^2 (por defecto), 6 = OLS sin pesos,
+#    1 = WLS con pesos N, 2 = WLS con pesos N/gamma^2
+codigos_metodo <- c("WLS_Nh2" = 7, "OLS" = 6, "WLS_N" = 1, "WLS_Ngamma2" = 2)
+
+grilla_comparacion <- expand_grid(
+  modelo = c("Sph", "Exp", "Gau", "Mat"),
+  metodo = names(codigos_metodo)
+)
+
+# 3. Función de ajuste
+ajustar_modelo <- function(mod_nombre, met_nombre) {
+  tryCatch(
+    suppressWarnings(
+      fit.variogram(vc_temp_reg_robusto, modelo_base(mod_nombre),
+                    fit.method = codigos_metodo[[met_nombre]])
+    ),
+    error = function(e) NULL
+  )
+}
+
+# 4. Se ajusta cada combinación una sola vez (los ajustes singulares se descartan)
+ajustes_vgm <- grilla_comparacion %>%
+  mutate(
+    ajuste = map2(modelo, metodo, ajustar_modelo),
+    SSErr  = map_dbl(ajuste, ~ if (is.null(.x) || isTRUE(attr(.x, "singular"))) NA_real_
+                               else attr(.x, "SSErr"))
+  )
+```
+
+```{r}
+#| label: tbl-comparacion_SSErr
+#| tbl-cap: "Comparación de modelos de covarianza usando SSErr"
+#| tbl-pos: "H"
+
+ajustes_vgm %>%
+  dplyr::select(modelo, metodo, SSErr) %>%
+  pivot_wider(names_from = metodo, values_from = SSErr) %>%
+  gt() %>%
+  cols_label(
+    modelo = "Modelo Teórico",
+    WLS_Nh2 = md(r"(WLS (pesos $N/h^2$, 7))"),
+    OLS = "OLS (sin pesos, 6)",
+    WLS_N = "WLS (pesos N, 1)",
+    WLS_Ngamma2 = md(r"(WLS (pesos $N/\gamma^2$, 2))")
+  ) %>%
+  fmt_scientific(
+    columns = -modelo,
+    decimals = 4
+  ) %>%
+  cols_align(
+    align = "center",
+    columns = everything()
+  )
+```
+
+En los resultados presentados en la @tbl-comparacion_SSErr al priorizar el método de mínimos cuadrados ponderados por defecto $(\text{WLS con pesos N/}h^2)$ por su mayor relevancia en el ajuste, el modelo de Matérn (Mat) se destaca como la opción óptima para representar la dependencia espacial. Esto se debe a que presenta el valor de error más bajo de esta columna metodológica, alcanzando un SSErr de $1.6821 × 10^{-7}$ que supera al resto de los modelos teóricos.
+
+```{r}
+# Mejor modelo dentro del método por defecto (WLS con pesos N/h^2, fit.method = 7)
+mejor_config <- ajustes_vgm %>%
+  filter(metodo == "WLS_Nh2") %>%
+  slice_min(SSErr, n = 1, with_ties = FALSE)
+```
+
+```{r}
+# Ajuste final del semivariograma óptimo
+modelo_optimo_vgm <- fit.variogram(
+  object = vc_temp_reg_robusto,
+  model  = modelo_base(mejor_config$modelo),
+  fit.method = codigos_metodo[["WLS_Nh2"]]
+)
+```
+
+\begin{table}[htbp]
+\centering
+\caption{Parámetros del modelo ajustado}
+\label{tab:parametros_variograma}
+\begin{tabular}{lcccc}
+\hline
+\textbf{Modelo} & \textbf{Efecto Nugget} & \textbf{Meseta parcial (psill)} & \textbf{Rango (range)} & \textbf{kappa} \\ 
+\hline
+Mat & 0.00000 & 9.10873 & 37242.17 & 1 \\ 
+\hline
+\end{tabular}
+\end{table}
+
+Al realizar la evalución y posteriormente el ajuste final del semivariograma con el modelo de Matérn, se establece un rango de dependencia espacial de aproximadamente 37 kilometros y una meseta parcial de 9.10873. Asimismo, el modelo ajustado estima un efecto pepita nulo, lo que indica que la variabilidad a microescala o el error de medición no son estadísticamente significativos bajo esta configuración.
+
+```{r}
+#| fig-cap: "Modelo teórico ajustado al semivariograma robusto de los residuos"
+#| label: fig-modelo_teorico_ajustado
+#| fig-height: 2.5
+
+plot(vc_temp_reg_robusto, modelo_optimo_vgm,
+     main = paste("Modelo ajustado:", mejor_config$modelo))
+```
+
+La @fig-modelo_teorico_ajustado se ilustra cómo el modelo de Matérn captura adecuadamente la dependencia espacial inicial, partiendo de un efecto pepita nulo hasta estabilizarse en su meseta teórica. Aunque el modelo proyecta una varianza constante que suaviza las fuertes oscilaciones a mayores distancias, ya que se asume esa volatilidad lejana como ruido aleatorio y prioriza la estructura espacial **local** fundamental para la interpolación.
+
+### Alternativas al ajuste clásico: GLS y REML
+
+Como complemento al ajuste tradicional del variograma sobre los residuales, se implementan los métodos de Mínimos Cuadrados Generalizados (GLS) y Máxima Verosimilitud Restringida (REML). Estas técnicas permiten estimar los parámetros de covarianza considerando la correlación entre observaciones y reduciendo el sesgo asociado a la estimación simultánea de la tendencia espacial.
+
+```{r}
+set.seed(1)
+sf_sub <- datos_sf[sample(nrow(datos_sf), 50), ]
+v_sub  <- variogram(TemperaturaMaximaReg ~ 1, sf_sub,
+                    cutoff = distancia_maxima, width = ancho_intervalo)
+
+modelo_inicial <- vgm(psill = psill_ini, model = "Mat",
+                      range = rango_ini, nugget = nugget_ini, kappa = 1)
+
+# WLS
+ajuste_wls <- fit.variogram(v_sub, modelo_inicial)
+
+# GLS (sobre el variogram cloud; requiere objeto Spatial)
+ajuste_gls <- fit.variogram.gls(TemperaturaMaximaReg ~ 1,
+                                data  = sf::as_Spatial(sf_sub),
+                                model = modelo_inicial, trace = FALSE)
+
+# REML (solo reestima pepita y meseta parcial; el rango queda fijo)
+coords_sub <- st_coordinates(sf_sub)
+df_reml <- data.frame(x = coords_sub[, 1],
+                      y = coords_sub[, 2],
+                      z = sf_sub$TemperaturaMaximaReg)
+
+ajuste_reml <- fit.variogram.reml(z ~ 1, locations = ~x + y,
+                                  data  = df_reml,
+                                  model = modelo_inicial, debug.level = 0)
+
+```
+
+```{r}
+#| label: tbl-comparacion-ajustes
+#| tbl-cap: "WLS vs. GLS vs. REML — mismo subconjunto de 50 estaciones (el rango de REML queda fijo en su valor inicial)"
+
+tabla_comparacion <- tibble(
+  metodo = c("WLS (fit.variogram)", "GLS (fit.variogram.gls)", "REML (fit.variogram.reml)"),
+  pepita = c(ajuste_wls$psill[1], ajuste_gls$psill[1], ajuste_reml$psill[1]),
+  meseta_parcial = c(ajuste_wls$psill[2], ajuste_gls$psill[2], ajuste_reml$psill[2]),
+  rango = c(ajuste_wls$range[2], ajuste_gls$range[2], ajuste_reml$range[2])
+)
+
+kable(tabla_comparacion,
+      booktabs = TRUE,
+      digits = 3, 
+      align = "c",
+      col.names = c("Método", "Pepita", "Meseta parcial", "Rango"))
+```
+
+El método WLS establece un rango de dependencia espacial de aproximadamente 40 kilometros, logrando una meseta parcial de 16.410 un poco elevada al que presenta el modelo teoríco y un efecto pepita nulo (0.000). Por su parte, el método GLS proyecta estimaciones ligeramente más conservadoras, con un rango cercano a los 34kilometros y una meseta de 12.809 cercana a la sugerida por el modelo Matern. En marcado contraste, el método REML estima parámetros desproporcionados, destacando un efecto pepita de 3.155, una enorme meseta parcial de 103.395 y un rango excesivo de 343 kilometros. Estos valores anómalos del REML confirman cuantitativamente su incapacidad para estabilizarse dentro de las distancias evaluadas para este fenómeno.
+
+```{r}
+#| fig-cap: "Semivariograma empírico de la submuestra de 50 estaciones y ajustes WLS, GLS y REML"
+#| label: fig-comparacion_diferentes_ajustes
+
+lineas_comparacion <- bind_rows(
+  mutate(as.data.frame(variogramLine(ajuste_wls,  maxdist = distancia_maxima)), metodo = "WLS"),
+  mutate(as.data.frame(variogramLine(ajuste_gls,  maxdist = distancia_maxima)), metodo = "GLS"),
+  mutate(as.data.frame(variogramLine(ajuste_reml, maxdist = distancia_maxima)), metodo = "REML")
+)
+
+ggplot() +
+  geom_point(data = v_sub, aes(dist, gamma, size = np), color = "grey40") +
+  geom_line(data = lineas_comparacion, aes(dist, gamma, color = metodo), linewidth = 1) +
+  scale_size_continuous(name = "N° pares", range = c(1.5, 4)) +
+  theme_test(base_size = 13) +
+  labs(x = "Distancia (m)", y = expression(hat(gamma)(h)), color = NULL,
+       title = "Semivariograma empírico (submuestra de 50)")
+```
+
+En la comparación mostrada en la @fig-comparacion_diferentes_ajustes evidencia que el WLS y GLS logran la mejor aproximación al patrón inicial de los datos empíricos al estabilizarse rápidamente en una meseta, mientras que el REML diverge significativamente de los puntos empíricos al proyectar un crecimiento continuo sin alcanzar una meseta teórica en el rango de distancias evaluado.
+
+## Anisotropía
+
+Para verificar que la relación espacial entre las temperaturas no cambie según la orientación geográfica (por ejemplo, paralelo a la costa frente a perpendicular hacia la cordillera), se evalúa la presencia de anisotropía. Este diagnóstico compara los variogramas en diferentes direcciones para confirmar si el modelo es isotrópico, lo cual es necesario para la predicción espacial.
+
+```{r}
+nugget_opt <- modelo_optimo_vgm$psill[modelo_optimo_vgm$model == "Nug"]
+if (length(nugget_opt) == 0) nugget_opt <- 0
+
+psill_opt <- modelo_optimo_vgm$psill[modelo_optimo_vgm$model != "Nug"][1]
+rango_opt <- modelo_optimo_vgm$range[modelo_optimo_vgm$model != "Nug"][1]
+tipo_mod  <- as.character(modelo_optimo_vgm$model[modelo_optimo_vgm$model != "Nug"][1])
+
+angulo_eje_mayor <- 90
+razon_aniso      <- 0.35
+
+
+# Modelo teórico ajustado con estructura anisotrópica
+
+modelo_aniso_opt <- vgm(
+  psill  = psill_opt,
+  model  = "Mat",
+  range  = rango_opt,
+  nugget = nugget_opt,
+  kappa = 1,
+  anis   = c(angulo_eje_mayor, razon_aniso)
+)
+
+var_nombre <- names(datos_sf)[sapply(datos_sf, is.numeric)][1]
+
+# Cálculo de semivariogramas direccionales empíricos
+v_dir_real <- variogram(
+  as.formula(paste(var_nombre, "~ 1")), 
+  datos_sf, 
+  alpha  = c(0, 45, 90, 135), 
+  cutoff = max(vc_temp_reg_robusto$dist), 
+  width  = max(vc_temp_reg_robusto$dist) / 15
+)
+
+```
+
+```{r}
+#| fig-cap: "Verificación de la isotropía en el modelo"
+#| label: fig-isotropia
+
+ggplot(v_dir_real, aes(dist, gamma, color = factor(dir.hor))) +
+  geom_point(size = 2) + 
+  geom_line(linewidth = 0.8) +
+  scale_color_viridis_d(name = "Dirección (°)") +
+  theme_test(base_size = 13) +
+  labs(
+    x = "Distancia (m)", 
+    y = expression(hat(gamma)(h)), 
+    title = "Semivariograma Direccional Empírico (Datos Reales)"
+  )
+```
+
+
+El semivariograma direccional de los datos reales exhibe un comportamiento altamente errático y ruidoso en todas las direcciones evaluadas (0, 45, 90, 135) grados respectivamente, con fluctuaciones severas que dificultan la identificación visual clara de una anisotropía sistemática en el campo de estudio. En especial, el pico observado y la erraticidad que observa a los 0 grados, demuestra el comportameinto anisotropico del modelo. Pero, relajando fuertemente este supuesto, se procede a realizar el kriging. 
+
+## Resultados - Kriging
+
+Como etapa final del análisis geoestadístico, se emplea el Kriging Universal para interpolar la temperatura del aire en las zonas donde no existen estaciones meteorológicas. Aprovechando el modelo de variograma ajustado y la tendencia espacial detectada, este método genera un mapa continuo de predicciones junto con su incertidumbre asociada, permitiendo delimitar las áreas que exceden los $31^\circ C$
+
+```{r}
+# datos_sf, distancia_maxima y ancho_intervalo ya están definidos en el informe
+
+v_sin_tendencia <- variogram(TemperaturaMaxima ~ 1,
+                             datos_sf, cutoff = distancia_maxima,
+                             width = ancho_intervalo)
+
+v_1er_orden     <- variogram(TemperaturaMaxima ~ Longitud + Latitud,
+                             datos_sf, cutoff = distancia_maxima, 
+                             width = ancho_intervalo)
+
+# Valores iniciales calculados de cada variograma
+ini <- function(v) {
+  nug <- min(v$gamma) * 0.5
+  list(nugget = nug,
+       psill  = max(median(tail(v$gamma, 5)) - nug, 0.01), 
+       kappa = 1)
+}
+
+ini_sin <- ini(v_sin_tendencia)
+ini_1er <- ini(v_1er_orden)
+
+modelo_sin_tendencia <- suppressWarnings(fit.variogram(
+  v_sin_tendencia,
+  vgm(psill = ini_sin$psill, model = "Mat",
+      range = 80000, nugget = ini_sin$nugget, kappa = 1))
+  )
+
+modelo_con_tendencia <- suppressWarnings(fit.variogram(
+  v_1er_orden,
+  vgm(psill = ini_1er$psill, model = "Mat",
+      range = 80000, nugget = ini_1er$nugget, kappa = 1))
+  )
+```
+
+```{r}
+# Malla de predicción (centros de celda) recortada al polígono
+
+malla_real <- st_make_grid(poligono, cellsize = 10000, what = "centers") %>%
+  st_as_sf()
+
+malla_real <- malla_real[st_within(malla_real, poligono, sparse = FALSE)[, 1], ]
+
+# Si la tendencia se modela con Longitud y Latitud (como en el informe), la malla también las necesita, en grados
+
+coords_ll <- st_coordinates(st_transform(malla_real, 4326))
+malla_real$Longitud <- coords_ll[, 1]
+malla_real$Latitud  <- coords_ll[, 2]
+```
+
+El número de puntos de la malla de predicción (recortada al polígono), es: `r nrow(malla_real)`
+
+```{r}
+#| fig-cap: "Malla de Predicción"
+#| label: fig-malla_de_prediccion
+
+ggplot() +
+  geom_sf(data = poligono, fill = NA, color = "black") +
+  geom_sf(data = malla_real, size = 0.3, color = "#3a7ca5", alpha = 0.5) +
+  geom_sf(data = datos_sf, size = 1.5, color = "darkred") +
+  theme_test(base_size = 13) +
+  labs(title = "Malla de predicción y \n estaciones de muestreo")
+```
+
+El mapa presentado en la @fig-malla_de_prediccion, muestra la malla de predicción y estaciones de muestreo ilustra cómo los puntos de observación se distribuyen de manera irregular sobre la cuadrícula uniforme del área de estudio. Esta configuración espacial sugiere que las futuras interpolaciones del modelo Kriging tendrán una mayor precisión en las zonas densamente muestreadas del centro y norte, mientras que presentarán una mayor incertidumbre (varianza de predicción) en las áreas con vacíos de información.
+
+### Kriging universal
+
+Dado que el análisis exploratorio demostró que la temperatura no posee una media constante en todo el territorio, sino que varía sistemáticamente con la latitud y la longitud, el método idóneo para la interpolación espacial es el Kriging Universal. A diferencia del kriging ordinario, esta técnica modela simultáneamente dos componentes: la tendencia determinística a gran escala (mediante una regresión polinómica sobre las coordenadas geográficas) y la variación aleatoria espacialmente correlacionada de los residuales (a través del modelo de variograma ajustado). De este modo, se obtienen predicciones óptimas e insesgadas en los sitios no monitoreados junto con su varianza de estimación, permitiendo delimitar con precisión las zonas que superan el umbral crítico de 31 °C.
+
+```{r}
+ku_real <- krige(TemperaturaMaxima ~ Latitud + Longitud,
+                 datos_sf, malla_real, model = modelo_con_tendencia)
+```
+
+```{r}
+malla_real$ku_pred <- ku_real$var1.pred
+malla_real$ku_sd   <- sqrt(pmax(ku_real$var1.var, 0))
+```
+
+La @fig-mapa_de_predicciones_desviaciones-1 evidencia que el Kriging universal proporciona una representación espacial coherente con la realidad geográfica al incorporar la latitud y longitud para modelar la tendencia climática regional subyacente. El modelo logra capturar de forma efectiva el marcado gradiente térmico a lo largo del área de estudio, delineando con precisión las zonas más cálidas en la región Caribe (norte, con valores superiores a 30 °C) y la transición gradual hacia las áreas más frías en el extremo sur del Pacífico y la zona andina (alrededor de 12 a 15 °C).
+
+```{r}
+#| fig-cap: "Predicciones de temperatura con kriging universal"
+#| label: fig-mapa_de_predicciones_desviaciones
+#| fig-subcap:
+#|   - "Predicción de temperatura (°C)"
+#|   - "Desviación estándar de predicción (°C)"
+#| layout-ncol: 2
+#| fig-width: 3
+#| fig-height: 3.5
+#| out-width: "100%"
+
+ggplot(malla_real, aes(color = ku_pred)) + geom_sf(size = 1) +
+  geom_sf(data = poligono, fill = NA, color = "black",
+          inherit.aes = FALSE) +
+  scale_color_viridis_c(name = "°C") +
+  theme_test(base_size = 13) +
+  labs(title = "Kriging universal") +
+  theme(plot.margin = margin(2, 2, 2, 2))
+
+ggplot(malla_real, aes(color = ku_sd)) +
+  geom_sf(size = 1) +
+  geom_sf(data = poligono, fill = NA, color = "black", inherit.aes = FALSE) +
+  scale_color_viridis_c(name = "D.E. (°C)",
+                        option = "plasma") +
+  theme_test(base_size = 13) +
+  labs(title = "Kriging universal") +
+  theme(plot.margin = margin(2, 2, 2, 2))
+```
+
+En la @fig-mapa_de_predicciones_desviaciones-2 se observa la distribución espacial de la desviación estándar de predicción obtenida con el Kriging universal, la cual refleja la incertidumbre asociada a cada punto estimado. Los menores errores de interpolación (tonos morados oscuros, inferiores a 1 °C) se concentran alrededor de las estaciones meteorológicas existentes, mientras que la incertidumbre aumenta progresivamente hacia las zonas con vacíos de muestreo y los bordes del territorio —alcanzando valores máximos entre 3,0 y 3,5 °C (tonos amarillos) en sectores como el norte de Chocó, el sur de Bolívar y Cesar, y el oriente de Cauca y Nariño—, demostrando que la incorporación de la tendencia geográfica mantiene controlada la varianza de predicción en gran parte de la región Caribe.
+
+### Validación cruzada 
+
+Con el fin de verificar la calidad del ajuste espacial y confirmar que las predicciones del Kriging Universal no presenten sesgos sistemáticos, se realiza una validación cruzada sobre el conjunto de estaciones observadas. Este método evalúa el desempeño real de la interpolación al predecir cada punto a partir de sus vecinos y contrastar los resultados con las mediciones reales mediante indicadores estadísticos de error y estandarización
+
+```{r}
+cv_con_tendencia <- krige.cv(TemperaturaMaxima ~ Latitud + Longitud, datos_sf, model = modelo_con_tendencia, verbose = FALSE)
+
+tabla_cv_real <- tibble(
+  modelo = c("Con tendencia de 1er orden"),
+  RMSE = c(sqrt(mean(cv_con_tendencia$residual^2))),
+  Cor_obs_pred = c(
+    cor(cv_con_tendencia$observed, cv_con_tendencia$observed - cv_con_tendencia$residual)
+    )
+  )
+```
+
+```{r}
+#| label: tbl-loo
+#| tbl-cap: "Validación Cruzada usando Leave-one-out"
+#| tbl-pos: "H"
+
+kable(tabla_cv_real,
+      format = "latex",
+      booktabs = TRUE,
+      align = "c") %>%
+  kable_styling(position = "center",
+                font_size = 9)
+```
+
+A pesar de la similitud en el error predictivo global arrojado por la validación cruzada, presentado en la @tbl-loo, la elección del Kriging Universal se fundamenta teórica y físicamente en la estructura del fenómeno térmico. La fase exploratoria demostró que aislar la tendencia espacial redujo la semivarianza máxima empírica de aproximadamente 31 a un valor cercano a 14 en los residuos. Esta caída, superior al 50 %, demuestra estadísticamente que el gradiente de latitud y longitud gobernaba la mayor parte de la variabilidad, y que al removerlo se logra ajustar el modelo sobre la verdadera autocorrelación local sin inflar artificialmente la varianza.
+
+Desde el punto de vista de la interpolación, conservar el proceso universal ofrece estimaciones más robustas y apegadas a la realidad geográfica. En zonas con escasa densidad de medidores o en los bordes del área de estudio, un modelo ordinario asumiría promedios locales constantes, ignorando el comportamiento macroscópico del clima. El Kriging Universal, al incorporar explícitamente la ecuación de regresión determinista, asegura que la interpolación en esos vacíos de información proyecte de manera natural el gradiente (temperaturas frías al sur y cálidas al norte), garantizando un mapa predictivo climatológicamente coherente.
+
+```{r}
+df_cv <- bind_rows(tibble(observado = cv_con_tendencia$observed,
+                          predicho = cv_con_tendencia$observed - cv_con_tendencia$residual,
+                          zscore = cv_con_tendencia$zscore, modelo = "Con tendencia 1er orden")
+                   )
+```
+
+
+
+```{r}
+#| fig-cap: "Diagnóstico de validación cruzada (leave-one-out)"
+#| label: fig-validacion-cruzada
+#| fig-subcap:
+#|   - "Temperatura observada vs. predicha"
+#|   - "Distribución de residuales estandarizados (z-score)"
+#| layout-ncol: 2
+#| fig-width: 3
+#| fig-height: 3.5
+#| out-width: "100%"
+
+ggplot(df_cv, aes(observado, predicho)) +
+  geom_point(alpha = 0.6, color = "#3a7ca5") +
+  geom_abline(slope = 1, intercept = 0, color = "darkred", linetype = "dashed") +
+  facet_wrap(~modelo) + coord_equal() + theme_test(base_size = 13) +
+  labs(x = "Temperatura observada (°C)", y = "Temperatura predicha por LOOCV (°C)",
+       title = "Observado vs. predicho")
+
+ggplot(df_cv, aes(zscore)) +
+  geom_histogram(bins = 20, fill = "#3a7ca5", color = "white") +
+  geom_vline(xintercept = c(-2, 2), color = "darkred", linetype = "dashed") +
+  facet_wrap(~modelo) + theme_test(base_size = 13) +
+  labs(x = "Residual estandarizado (z-score)", y = "Frecuencia",
+       title = "Residuales \n estandarizados")
+```
+
+
+En el panel de validación cruzada (@fig-validacion-cruzada), la comparación entre las temperaturas observadas y las predichas mediante leave-one-out para el modelo con tendencia de primer orden (@fig-validacion-cruzada-1) muestra que los puntos se agrupan estrechamente alrededor de la línea de igualdad ideal (diagonal roja), evidenciando una buena capacidad predictiva a lo largo de todo el rango térmico (de 10 °C a 33 °C) sin sesgos sistemáticos. Por su parte, la distribución de los residuales estandarizados (z-score) en la @fig-validacion-cruzada-2 confirma que el modelo está bien calibrado, ya que la gran mayoría de los errores se concentran de forma simétrica alrededor de cero y dentro del intervalo aceptable de -2 a 2 desviaciones estándar, presentando únicamente contados valores atípicos extremos asociados a estaciones con fuertes contrastes topográficos locales
+
+
+# Respuesta a la pregunta de investigación
+
+Una vez validada la capacidad predictiva y el buen ajuste del modelo de Kriging Universal, se emplea la superficie continua de temperatura generada para dar respuesta directa a la pregunta central de este estudio. A partir de los valores estimados en toda la malla geográfica, se filtran y cartografían específicamente aquellas áreas sin estaciones de monitoreo que superan el umbral crítico de 31 °C entre las 11:00 a. m. y las 2:00 p. m. del 13 de julio de 2026, permitiendo delimitar con precisión los focos de calor extremo en las regiones Caribe y Pacífica.
+
+```{r}
+#| label: fig-zonas-criticas
+#| fig-cap: "Zonas no monitoreadas con temperaturas predichas superiores a 31 °C mediante Kriging universal"
+
+malla_filtrada <- malla_real %>% filter(ku_pred > 31)
+
+ggplot() +
+  geom_sf(data = poligono, fill = "white", color = "black") +
+  geom_sf(data = malla_filtrada, aes(color = ku_pred), size = 1.5) +
+  geom_sf_label(data = depto_estudio, aes(label = NAME_1), 
+                size = 1.4, fontface = "bold", label.size = 0.2) +
+  scale_color_viridis_c(name = "Temp. (°C)", option = "magma") +
+  theme_test(base_size = 11) +
+  labs(x = "Longitud", y = "Latitud")
+```
+
+Para el 13 de julio de 2026 entre las 11:00 a. m. y las 14:00 p. m., las anomalías térmicas que superan el umbral crítico de 31 °C se concentran exclusivamente en la región Caribe, mientras que toda la costa Pacífica (Chocó, Valle del Cauca, Cauca y Nariño) se mantiene por debajo de dicho límite. Según la interpolación por Kriging Universal, las zonas no monitoreadas con mayor probabilidad espacial de exceder este umbral corresponden a tres focos críticos: el norte de Sucre, donde se registra el núcleo de calor más intenso con temperaturas cercanas a los 33,0 °C; el sur de La Guajira, con una amplia zona térmica alrededor de los 32,0 °C; y el centro-occidente de Magdalena (en límites con Atlántico y Cesar), que presenta una franja extensa entre los 31,0 °C y 32,0 °C.
+
+
+# Referencias
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

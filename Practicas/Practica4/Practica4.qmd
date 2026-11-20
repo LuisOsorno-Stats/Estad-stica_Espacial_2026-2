@@ -16,43 +16,440 @@ always_allow_html: true
 editor: visual
 ---
 
-
 # Introducción
 
 En la Práctica 3 se analizaron 114 estaciones reales de la Ciénaga Grande de Santa Marta para intentar inferir su patrón espacial, pero con el problema de no conocer la verdadera estructura de fondo del fenómeno. Esta práctica invierte esa lógica: ahora el objetivo será simular los datos definiendo desde el principio su covarianza y tendencia. Trabajar con un entorno controlado permite comprobar de primera mano si las herramientas de ajuste realmente recuperan los parámetros teóricos y qué tan confiables son cuando las aplicas en situaciones reales donde la verdad es desconocida.
 
 A lo largo del documento se explorarán e interpretarán los parámetros fundamentales de la covarianza espacial (como meseta, rango y pepita) y simularán campos aleatorios mediante gstat. Además, verificando si los semivariogramas empíricos reproducen los modelos teóricos generadores, comparando distintos modelos (esférico, exponencial, Gaussiano y Matérn) usando la suma de cuadrados del error (SSErr), observaremos la anisotropías direccionales y una breve aplicación de este proceso a los datos reales de temperatura de la Ciénaga Grande.
 
-La idea principal, es ir combinando los análisis hechos, con los 6 ejercicios propuestos. Cada que se implemente uno de ellos, se dirá explicitamente cual es el el enunciado. 
+La idea principal, es ir combinando los análisis hechos, con los 6 ejercicios propuestos. Cada que se implemente uno de ellos, se dirá explicitamente cual es el el enunciado.
 
 # Preparación del entorno
 
 Vamos a cargar las librerias que emplearemos en esta práctica, definiendo claramente su uso.
 
-
 ```{r}
+# Limpieza del espacio de trabajo
+
+rm(list = ls())
+
+# Cargado de las librerias
+
 library(sf)        # Manejo de los objetos espaciales
 library(gstat)     # Simulación y análisis espacial
 library(tidyverse) # Posee muchas funciones utiles en R
 library(scales)    # Automatiza la elección de breaks y labels en ejes
+library(ggplot2)
+library(patchwork)
 ```
-
 
 # Modelos teóricos de covarianza espacial
 
+Los modelos de covarianza permiten describir o modelar cómo decae la covarianza entre un par de observaciones a medida que la distancia entre ellas aumenta. En principio, bajo el supuesto de estacionariedad de segundo orden, es decir, media constantante y covarianza que depende solo de la distancia entre observaciones, esto permite definir dos parámetros esenciales: la meseta que es el valor para el cual la covarianza $C(h)$ converge cuando la distancia tiende a infinito y el rango, que es la distancia para la cual dos observaciones se consideran no correlacionadas.
 
+Como dato a considerar, en el modelo esférico el parámetro *range* es directamente el rango práctico, es decir, que la covarianza llega a cero en $h=range$. En contraste, para el modelo esponencial, $C(h)=\sigma^2exp(-h/\phi)$ nunca llega exactamente a cero, por lo que la función en *gstat* reporta como *range* el parámetro de decaimiento $\phi$ y no el rango práctico.
 
+Para este ejercicio usaremos dos modelos de covarianza para comparar los implementados en *gstat* contra una programación manual. Compararemos el modelo **Exponencial** y el *Gaussiano*. Las funciones de covarianza $C(h)$ pura (asumiendo una meseta $\sigma^2$ y un parámetro de decaimiento $\phi$) para ambos.
 
+Para el proceso, usaremos un valor de $\sigma^2=9$ y un rango de 15. De este modo, las funciones son:
 
+- **Modelo Exponencial:**
 
+$$C(h)=\sigma^2 exp \left(-\frac{h}{\phi}\right)$$
 
+Su rango efectivo o práctico es de $3\cdot\phi=3\cdot 15=45$
 
+```{r}
+d <- seq(0, 70, by = 0.25)
 
+modelo_exp_true <- vgm(psill = 9, model = "Exp", range = 15, nugget = 0)
+prtexp <- as.data.frame(modelo_exp_true)[2, 1:3, drop = FALSE]
+rownames(prtexp) <- NULL
+prtexp
+```
 
+- **Modelo Gaussiano:**
 
+$$C(h)=\sigma^2 exp \left(-\left(\frac{h}{\phi}\right)^2\right)$$
 
+Su rango efectivo o práctico es de $\sqrt{3}\cdot\phi=\sqrt{3}\cdot 15=25.98$
 
+```{r}
+modelo_gau_demo <- vgm(psill = 9, model = "Gau", range = 15, nugget = 0)
+prtgau <- as.data.frame(modelo_gau_demo)[2, 1:3, drop = FALSE]
+rownames(prtgau) <- NULL
+prtgau
+```
 
+Realicemos la programación de ambos modelos:
 
+```{r}
+cov_exp_manual = 9*exp(-d/15)
+  cov_exp_gstat  <- variogramLine(modelo_exp_true, dist_vector = d, covariance = TRUE)$gamma
+  
+cov_gau_manual <- 9*exp(-(d/15)**2)
+cov_gau_gstat  <- variogramLine(modelo_gau_demo, dist_vector = d, covariance = TRUE)$gamma
 
+stopifnot(isTRUE(all.equal(cov_exp_manual, cov_exp_gstat)))
+stopifnot(isTRUE(all.equal(cov_gau_manual, cov_gau_gstat)))
+  
+```
 
+```{r}
+df_cov <- bind_rows(
+  tibble(dist = d, covarianza = cov_exp_manual, modelo = "Exponencial (φ = 15, rango práctico = 45)"),
+  tibble(dist = d, covarianza = cov_gau_manual, modelo = "Gaussiano (rango = 25.98)")
+)
+ggplot(df_cov, aes(x = dist, y = covarianza, color = modelo)) +
+  geom_line(linewidth = 1) +
+  theme_test(base_size = 13) +
+  labs(x = "Distancia (h)", y = "C(h)", color = NULL,
+       title = "Función de covarianza: cálculo manual vs. gstat") +
+  theme(legend.position = "bottom")
+```
+
+Este gráfico permite comparar cómo decae la covarianza espacial $C(h)$ a medida que aumenta la distancia $h$ entre dos puntos. Como el cálculo manual que programamos es matemáticamente idéntico a la fórmula que utiliza gstat por dentro, las líneas del ajuste manual y de la librería se sobreponen perfectamente. Ambas curvas parten de una meseta inicial de 9, pero muestran caminos muy diferentes para perder esa relación a medida que la distancia crece.
+
+La gran diferencia está en cómo se comportan cerca del origen (cuando la distancia es casi cero). El modelo exponencial (línea roja) cae de forma recta y rápida desde el primer momento, lo que significa que puntos muy cercanos pueden ser bastante distintos entre sí, generando datos "rugosos". En cambio, el modelo Gaussiano (línea azul) empieza de forma muy suave y plana en la cima, lo que indica que los puntos cercanos se parecen mucho entre sí y producen cambios muy graduales y continuos en el espacio
+
+Por último, aunque los dos modelos se definieron con el mismo valor inicial de rango, la distancia a la que la covarianza se vuelve casi cero (el rango práctico) es muy distinta. En el modelo Gaussiano la relación cae más rápido en distancias intermedias y alcanza su rango práctico cerca de la distancia 26, mientras que el modelo exponencial mantiene cierta memoria espacial hasta distancias mucho mayores, llegando a su rango práctico alrededor de la distancia 45
+
+# Simulación de campos espaciales con estructura conocida
+
+Usando el modelo Gaussiano, con el objetivo de cumplir el primer ejercicio propuesto, el cual tiene meseta de 9 y un rango práctico de 45 ($\phi=15$), simularemos campos aleatorios, uno en el cual la media es constante (proceso estacionario) y el otro con una tendencia lineal a gran escala, la cual será $u(x, y) = -2 + 5x +3y$, el cual es un proceso no estacionario en la media, pero su varianza si será constante.
+
+Como elemento adicional, la grilla de simulación será de tamaño $30 \times 30$, así se cumple el segundo ejercicio propuesto.
+
+```{r}
+grid <- expand.grid(x = 0:29, y = 0:29)
+
+medias_cte  <- rep(37, nrow(grid))
+medias_ncte <- -2 + 5 * grid$x + 3 * grid$y
+```
+
+Esta malla, define los puntos de muestreo donde se observa o mide el fenómeno. La malla dibujada será:
+
+```{r}
+ggplot(grid, aes(x = x, y = y)) +
+  geom_point(size = 2, color = "#3a7ca5") +
+  coord_equal() +
+  theme_test(base_size = 10) +
+  labs(x = "x", y = "y", title = "Puntos de muestreo - malla regular")
+```
+
+Se evidencia que el muestreo es muy intensivo, claramente hay muchos puntos donde se mide la variable de interés. Esta es una situación ideal en el análisis espacial, porque se mide de forma detallada la variable o proceso, esto es el caso ideal en un análisis espacial.
+
+Ahora para construir el proceso, usando la matriz de covarianza Gaussiana, es decir, $9\cdot exp \left(-\left(\frac{h}{15}\right)^2\right)$, será a través de la función que genera puntos aleatorios de una normal multivariada. Exploraremos el caso de media constante y donde existe un gradiente.
+
+## Media Constante
+
+Aquí asumimos que el valor promedio es el mismo en todos los puntos (37 unidades). Como la media no cambia según el lugar, las diferencias entre un punto y otro dependen únicamente de la distancia que los separa. Esto nos sirve para ver cómo se comportan los datos cuando solo actúa la correlación espacial pura.
+
+```{r}
+set.seed(2026)
+
+# Manual
+distancia  <- as.matrix(dist(grid))
+covarianza <- 9 * exp(-(distancia / 15)**2)
+sim_cte_manual <- MASS::mvrnorm(1, medias_cte, covarianza)
+
+datos_cte <- tibble(x = grid$x, y = grid$y, manual = sim_cte_manual)
+```
+
+```{r dev="png"}
+p1 <- ggplot(datos_cte, aes(x = x, y = y, color = manual)) +
+  geom_point(size = 3) +
+  scale_color_viridis_c(name = "z") +
+  coord_equal() +
+  theme_test(base_size = 10) +
+  labs(x = "x", y = "y", title = "Puntos de muestreo — mvrnorm")
+
+p2 <- ggplot(datos_cte, aes(x, y, fill = manual)) + 
+  geom_raster() +
+  scale_fill_viridis_c(name = "z") + 
+  coord_equal() + 
+  theme_test(base_size = 10) +
+  labs(title = "Campo simulado - mvrnorm")
+
+panel_final <- p1 + p2
+
+panel_final
+```
+
+En el gráfico se observa cómo la simulación con media constante crea zonas continuas y suaves gracias al modelo Gaussiano. Los valores más altos (tonos amarillos y verdes claros) se agrupan en el centro, mientras que los valores más bajos (tonos azules y morados) quedan hacia las esquinas, cambiando de forma muy gradual entre puntos vecinos. Este comportamiento muestra claramente la dependencia espacial pura: aunque el promedio teórico es el mismo para toda la malla (37), la fuerte correlación entre puntos cercanos genera estas "islas" o parches de valores similares sin necesidad de que exista una tendencia inclinada en el mapa.
+
+## Media no Constante
+
+En este caso, el valor promedio sí cambia según la ubicación en la malla mediante la fórmula $-2 + 5x + 3y$, creando una inclinación o tendencia a gran escala. Sobre este cambio continuo sumamos la misma estructura espacial, lo que nos permite simular un fenómeno más realista (como la temperatura) y ver qué pasa cuando existe una tendencia global en los datos.
+
+```{r}
+# Manual
+sim_ncte_manual <- MASS::mvrnorm(1, medias_ncte, covarianza)
+
+datos_ncte <- tibble(x = grid$x, y = grid$y, manual = sim_ncte_manual)
+```
+
+```{r dev="png"}
+p3 <- ggplot(datos_ncte, aes(x = x, y = y, color = manual)) +
+  geom_point(size = 3) +
+  scale_color_viridis_c(name = "z") +
+  coord_equal() +
+  theme_test(base_size = 13) +
+  labs(x = "x", y = "y", title = "Puntos de muestreo — mvrnorm")
+
+p4 <- ggplot(datos_ncte, aes(x, y, fill = manual)) + 
+  geom_raster() +
+  scale_fill_viridis_c(name = "z") + 
+  coord_equal() + 
+  theme_test(base_size = 13) +
+  labs(title = "Campo simulado - mvrnorm")
+
+panel_final2 <- p3 + p4
+
+panel_final2
+```
+
+En este gráfico se refleja claramente el efecto de la tendencia lineal sobre el proceso espacial. Los valores aumentan de forma continua desde la esquina inferior izquierda (tonos oscuros cercanos a 0) hasta la esquina superior derecha (tonos amarillos que superan 200). A diferencia del mapa con media constante, aquí el gradiente global domina todo el patrón visual, haciendo que el cambio en la ubicación explique casi toda la variación de los datos y ocultando a simple vista las pequeñas fluctuaciones locales generadas por la covarianza.
+
+# ¿La simulación tiene la estructura que creemos que tiene?
+
+Un paso natural y muy lógico es verificar si el campo simulado proviene el modelo de semivarianza planteado, a priori, sabemos que el campo proviene de un modelo de semivarianza Gaussiano. Lo que haremos es hacer unos análisis para observar si el semivariograma empírico es similar al teórico.
+
+```{r}
+sf_cte <- st_as_sf(tibble(x = grid$x, y = grid$y, z = datos_cte$manual),
+                   coords = c("x", "y"), remove = FALSE)
+
+v_cte <- variogram(z ~ 1, sf_cte, cutoff = 30, width = 1)
+linea_teorica <- variogramLine(modelo_gau_demo, maxdist = 30)
+```
+
+```{r}
+ggplot() +
+  geom_point(data = v_cte, aes(dist, gamma, size = np), color = "#3a7ca5") +
+  geom_line(data = linea_teorica, aes(dist, gamma), color = "darkred", linewidth = 1) +
+  scale_size_continuous(name = "N° pares", range = c(1.5, 5)) +
+  theme_test(base_size = 13) +
+  labs(x = "Distancia", y = expression(hat(gamma)(h)),
+       title = "Semivariograma empírico vs. modelo verdadero")
+```
+
+En el gráfico se observa que el semivariograma empírico (puntos azules) sigue muy de cerca la forma parabólica de la curva teórica Gaussiana (línea roja) a distancias cortas (hasta $h \approx 10$), lo que confirma la suave continuidad espacial del proceso generado. Sin embargo, a distancias intermedias y largas (más allá de $h = 15$), los puntos empíricos suben por encima del modelo teórico y luego caen marcadamente. Si bien parece seguir la forma, tiene desviaciones importantes para distancias medias.
+
+# Ajuste de modelos teóricos al semivariograma: ¿se recupera el modelo verdadero?
+
+Procederemos a ajustar los cuatro modelos más comunes, el exponencial, gaussiano, esférico y Matérn, ajustados por minimos cuadrados ponderados sobre el semivariograma empírico de los datos simulados. Usaremos como criterio de decisión, el SSErr.
+
+```{r}
+modelos_candidatos <- c("Sph", "Exp", "Gau", "Mat")
+
+ajustes_sim <- map(modelos_candidatos, function(m) {
+  tryCatch(
+    suppressWarnings(fit.variogram(v_cte, vgm(psill = 4, model = m, range = 3, nugget = 0.1))),
+    error = function(e) NULL
+    )
+  }) %>% 
+  set_names(modelos_candidatos)
+
+tabla_sim <- tibble(
+  modelo = modelos_candidatos,
+  SSErr  = map_dbl(ajustes_sim, ~ if (is.null(.x)) NA_real_ 
+                   else attr(.x, "SSErr"))
+  ) %>%
+  arrange(SSErr)
+
+tabla_sim
+```
+
+La tabla muestra que el procedimiento de ajuste sí logra recuperar el modelo verdadero con el que se generaron los datos. El modelo Gaussiano (Gau) obtiene el menor valor de suma de cuadrados del error ($\text{SSErr} = 1047.84$), superando de forma clara al resto de alternativas. Esto demuestra que, al trabajar en condiciones controladas sin tendencia, el criterio del SSErr logra identificar correctamente la estructura de covarianza real del campo espacial.
+
+```{r}
+mejor_sim_nombre <- tabla_sim$modelo[1]
+mejor_sim <- ajustes_sim[[mejor_sim_nombre]]
+cat("Mejor modelo según SSErr:", mejor_sim_nombre, "\n\n")
+```
+
+```{r}
+print(mejor_sim)
+```
+
+```{r}
+plot(v_cte, mejor_sim, main = paste("Modelo ajustado a datos simulados:", mejor_sim_nombre))
+```
+
+Al ajustar el modelo Gaussiano sobre el semivariograma empírico, el algoritmo por mínimos cuadrados logra estimar un efecto pepita nulo (Nug = 0), una meseta parcial de $7.96$ y un parámetro de rango de $10.69$. En el gráfico se observa cómo la curva estimada se acopla casi a la perfección con los puntos empíricos a distancias cortas y medias (hasta $h \approx 12$), capturando muy bien la forma parabólica inicial. Aunque la meseta estimada ($7.96$) y el rango práctico derivado ($\sqrt{3} \times 10.69 \approx 18.5$) resultaron algo menores a los valores teóricos originales ($9$ y $26$), el modelo ajustado logra representar con gran precisión la estructura espacial principal del mapa simulado, ignorando la caída atípica al final causada por el efecto de borde en la grilla.
+
+# Alternativas al ajuste clásico: GLS y REML
+
+En esta sección compararemos tres métodos de ajuste de semivariogramas (`WLS`, `GLS` y `REML`) para evaluar cómo estiman la estructura espacial a partir de una misma muestra de datos. El método tradicional (`fit.variogram`) usa mínimos cuadrados ponderados (`WLS`) sobre datos agrupados en intervalos, lo cual es rápido y estable, pero asume falsamente que los pares de puntos son independientes entre sí.
+
+Para corregir esta limitación, probaremos dos alternativas de `gstat`. Por un lado, `GLS` ajusta directamente sobre todos los pares sin agrupar (`variogram cloud`) tomando en cuenta su correlación, aunque su costo computacional es muy alto. Por otro lado, `REML` utiliza verosimilitud restringida para reestimar la pepita y la meseta parcial manteniendo el rango fijo. Para hacer una comparación justa y viable computacionalmente, aplicaremos los tres métodos sobre una submuestra aleatoria de 50 puntos partiendo del mismo modelo inicial.
+
+Para ello, emplearemos un modelo Matérn con $\sigma^2=16$, rango de 12 y un efecto pepita de 2.
+
+```{r}
+set.seed(1)
+sf_cte_sub <- sf_cte[sample(nrow(sf_cte), 100), ]
+sf_cte_sub_j <- st_jitter(sf_cte_sub, amount = 0.001)
+v_cte_sub  <- variogram(z ~ 1, sf_cte_sub_j, cutoff = 25, width = 1)
+
+# Modelo inicial Matérn
+modelo_inicial <- vgm(psill = 16, model = "Mat", range = 12, nugget = 2, kappa = 0.5)
+
+# WLS: Mínimos cuadrados ponderados
+ajuste_wls <- fit.variogram(v_cte_sub, modelo_inicial)
+
+# GLS: Ahora con las coordenadas ligeramente variadas
+ajuste_gls <- fit.variogram.gls(z ~ 1, data = sf::as_Spatial(sf_cte_sub_j),
+                                  model = modelo_inicial, trace = FALSE)
+
+# REML: Verosimilitud restringida
+ajuste_reml <- fit.variogram.reml(z ~ 1, locations = ~x + y,
+                                    data = as.data.frame(sf_cte_sub)[, c("x", "y", "z")],
+                                    model = modelo_inicial, debug.level = 0)
+```
+
+```{r}
+lineas_comparacion <- bind_rows(
+  mutate(as.data.frame(variogramLine(ajuste_wls,  maxdist = 25)), metodo = "WLS"),
+  mutate(as.data.frame(variogramLine(ajuste_gls,  maxdist = 25)), metodo = "GLS"),
+  mutate(as.data.frame(variogramLine(ajuste_reml, maxdist = 25)), metodo = "REML")
+)
+
+ggplot() +
+  geom_point(data = v_cte_sub, aes(dist, gamma, size = np), color = "grey40") +
+  geom_line(data = lineas_comparacion, aes(dist, gamma, color = metodo), linewidth = 1) +
+  scale_size_continuous(name = "N° pares", range = c(1.5, 4)) +
+  theme_test(base_size = 13) +
+  labs(x = "Distancia", y = expression(hat(gamma)(h)), color = NULL,
+       title = "Semivariograma empírico (submuestra de 50)")
+```
+
+El método **WLS** (línea azul) logra el mejor ajuste visual sobre los puntos empíricos a distancias cortas y medias (hasta los 20), siguiendo de cerca la tendencia ascendente de la semivarianza. Por su parte, **GLS** (línea roja) y **REML** (línea verde) muestran trazados casi idénticos entre sí, pero estiman una meseta significativamente más baja que subestima los puntos observados. Esta diferencia ocurre porque GLS y REML consideran la matriz de covarianza completa entre todos los pares de datos sin agrupar, lo que los hace muy sensibles a la escala global y a la variabilidad de la submuestra reducida. En conclusión, WLS prioriza el ajuste directo sobre los promedios por intervalo (*bins*), mientras que GLS y REML aportan mayor rigor estadístico ante la autocorrelación de los pares, aunque con un menor ajuste visual en muestras pequeñas.
+
+# Anisotropía: detectarla en un campo simulado
+
+Hasta ahora se ha asumido que la correlación espacial depende únicamente de la distancia entre observaciones y no de la orientación (isotropía). No obstante, cuando la dependencia espacial se manifiesta con mayor fuerza o alcance en una dirección específica, el fenómeno se considera anisotrópico.
+
+En la librería `gstat`, esta estructura se define mediante la función `vgm()` utilizando el parámetro `anis = c(ángulo, razón)`. En esta especificación, el *ángulo* representa la dirección principal (en grados contados desde el Norte) donde el rango alcanza su máximo alcance, mientras que la *razón* expresa la proporción entre el rango menor (perpendicular) y dicho rango mayor. Para validar metodológicamente la capacidad del semivariograma direccional en la detección de este patrón, se simuló un campo espacial especificando un rango amplio en la dirección 45° (Este-Oeste) y un rango cinco veces menor (razón de 0.05) en la dirección 0° (Norte-Sur).
+
+```{r}
+modelo_aniso <- vgm(psill = 4, model = "Mat", range = 12, 
+                    nugget = 2, kappa=2,
+                    anis = c(45, 0.05))
+
+grid_fino <- expand.grid(x = seq(0, 24, by = 1), y = seq(0, 24, by = 1))
+g_aniso <- gstat(formula = z ~ 1, locations = ~x + y, dummy = TRUE, beta = 20,
+                 model = modelo_aniso, nmax = 40)
+
+set.seed(11)
+sim_aniso <- predict(g_aniso, newdata = grid_fino, nsim = 1)
+```
+
+```{r}
+sf_aniso <- st_as_sf(tibble(x = grid_fino$x, y = grid_fino$y, z = sim_aniso$sim1),
+                  coords = c("x", "y"), remove = FALSE)
+```
+
+```{r dev="png"}
+p5 <- ggplot(sf_aniso, aes(x, y, fill = z)) + geom_raster() +
+  scale_fill_viridis_c(name = "z") + coord_equal() + theme_test(base_size = 13) +
+  labs(title = "Campo simulado anisotrópico")
+v_dir <- variogram(z ~ 1, sf_aniso, alpha = c(0, 45, 90, 135), cutoff = 12, width = 1.5)
+p6 <- ggplot(v_dir, aes(dist, gamma, color = factor(dir.hor))) +
+  geom_point() + geom_line() +
+  scale_color_viridis_d(name = "Dirección (°)") +
+  theme_test(base_size = 13) +
+  labs(x = "Distancia", y = expression(hat(gamma)(h)), title = "Semivariograma direccional")
+
+panel_final3 <- p5 + p3
+```
+
+La curva azul correspondiente a 45° muestra un crecimiento de la semivarianza mucho más lento y gradual a distancias cortas y medias (alcanza valores cercanos a 3.5 a distancia 6), lo que confirma que en esta dirección el rango de autocorrelación espacial es considerablemente mayor. En contraste, las direcciones perpendiculares y alejadas (especialmente 135°, 0° y 90°) crecen de forma abrupta desde las primeras distancias alcanzando valores de semivarianza de 5 a 6 rápidamente. Esta drástica diferencia en las pendientes y niveles iniciales de semivarianza demuestra que el variograma empírico direccional capta con precisión la fuerte estructura anisotrópica impuesta al modelo
+
+# Aplicación a datos reales: Salinidad en la Ciénaga Grande
+
+Tras haber validado las herramientas en escenarios controlados, aplicamos el análisis geoestadístico a los datos reales de salinidad en la Ciénaga Grande de Santa Marta. Esta variable se analiza directamente a partir de sus valores originales, dado que previamente se comprobó la ausencia de una tendencia espacial global. La salinidad presenta un comportamiento particular: la mayor parte del cuerpo de agua (zonas occidente, centro y sur) mantiene valores bajos y altamente uniformes (15 a 20), mientras que el extremo nororiente exhibe un incremento drástico (25 a más de 30) impulsado por el intercambio marino directo.
+
+Realicemos un gráfico preliminar para recordar la distribución espacial de los datos.
+
+```{r}
+datos.cienaga <- readxl::read_xls("data/base_cienaga.xls")
+names(datos.cienaga) <- c("Este", "Norte", "prof", "temp", "sali", "oxig")
+
+datos_sf <- st_as_sf(datos.cienaga, coords = c("Este", "Norte"), crs = 3116, remove = FALSE)
+```
+
+```{r}
+contorno_df <- read.table("data/cienaga_border.txt", header = TRUE)
+contorno_cerrado <- rbind(contorno_df, contorno_df[1, ])
+contorno_sf <- st_sf(
+  nombre = "Ciénaga Grande de Santa Marta",
+  geometry = st_sfc(st_polygon(list(as.matrix(contorno_cerrado))), crs = 3116)
+)
+```
+
+```{r dev="png"}
+ggplot() +
+  # Dibuja el polígono asegurando que no altere el fondo externo
+  geom_sf(data = st_make_valid(contorno_sf), fill = "#d6ecf5", color = "#3a7ca5", linewidth = 0.4) +
+  geom_sf(data = datos_sf, aes(color = sali), size = 2) +
+  scale_color_viridis_c(option = "inferno", name = "Profundidad (m)") +
+  coord_sf(crs = st_crs(3116)) +
+  labs(
+    title = "Estaciones de muestreo en la Ciénaga Grande de Santa Marta",
+    subtitle = "Color: Salinidad — EPSG:3116"
+  ) +
+  theme_void(base_size = 11) + # theme_void elimina ejes y marcos que causan el cuadro negro
+  theme(
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background  = element_rect(fill = "white", color = NA),
+    legend.position  = "right",
+    plot.title       = element_text(face = "bold", size = 12, hjust = 0.5),
+    plot.subtitle    = element_text(size = 10, hjust = 0.5)
+  )
+```
+
+Dado que no existe un gradiente continuo a lo largo de toda la ciénaga, sino un foco bien delimitado de alta salinidad hacia la comunicación marina, el objetivo de esta sección es evaluar el comportamiento direccional de los datos originales, determinar la presencia de anisotropía y ajustar los modelos correspondientes bajo las condiciones reales del ecosistema.
+
+```{r}
+distancia_maxima <- 2*max(dist(st_coordinates(datos_sf)))/3
+ancho_intervalo  <- distancia_maxima / 12
+
+v_1er_orden <- variogram(sali ~ 1, datos_sf, cutoff = distancia_maxima, width = ancho_intervalo)
+```
+
+```{r}
+nugget_inicial <- 0.3
+psill_inicial  <- var(datos.cienaga$sali) - nugget_inicial
+
+ajustes_real <- map(modelos_candidatos, function(m) {
+  tryCatch(
+    suppressWarnings(fit.variogram(v_1er_orden,
+                                   vgm(psill = psill_inicial, model = m,
+                                       range = distancia_maxima / 4, nugget = nugget_inicial))),
+    error = function(e) NULL
+  )
+}) %>% set_names(modelos_candidatos)
+
+tabla_real <- tibble(
+  modelo = modelos_candidatos,
+  SSErr  = map_dbl(ajustes_real, ~ if (is.null(.x)) NA_real_ else attr(.x, "SSErr"))) %>% arrange(SSErr)
+
+tabla_real
+```
+
+```{r}
+mejor_real_nombre <- tabla_real$modelo[1]
+mejor_real <- ajustes_real[[mejor_real_nombre]]
+cat("Mejor modelo según SSErr:", mejor_real_nombre, "\n\n")
+```
+
+```{r}
+print(mejor_real)
+```
+
+```{r}
+plot(v_1er_orden, mejor_real, main = paste("Modelo ajustado — salinidad (Ciénaga Grande):", mejor_real_nombre))
+```
+
+El modelo Gaussiano resultó ser el mejor ajuste para la salinidad ($SSErr \approx 0.0000528$) gracias a su suavidad en distancias cortas, mostrando un efecto pepita inicial de $2.33$ que refleja una variabilidad a pequeña escala muy baja. Aunque el modelo proyecta una meseta parcial ($psill$) de $22.7$ (meseta total de $25$), esta no se alcanza a estabilizar dentro de la ventana observada de 20 000 m debido a la curva ascendente sostenida que genera el foco de alta salinidad en el nororiente. Con un parámetro de rango de $24 833\text{ m}$, el rango efectivo real del modelo Gaussiano ($\sqrt{3} \times \text{rango}$) se ubica en aproximadamente $43 000\text{ m}$, lo que confirma que la salinidad mantiene una estructura de dependencia espacial continua que abarca prácticamente la totalidad de la Ciénaga Grande.
